@@ -22,8 +22,8 @@ TRAITS_FILE = "traits.txt"
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Колко секунди да е един chunk за whisper - че иначе ще се насѐре. 
-CHUNK_SECONDS = 1 * 60  # 1 минута, щото допамин
+# How long a whisper chunk would be
+CHUNK_SECONDS = 1 * 60  
 SAMPLE_RATE = 16000
 
 
@@ -37,7 +37,7 @@ def rand_delay(label=""):
 
 
 # -----------------------
-# TRANSCRIBE ЕДИН CHUNK С ЛОКАЛЕН WHISPER
+# TRANSCRIBE 1 CHUNK WITH A LOCAL WHISPER
 # -----------------------
 def _transcribe_single_local(wav_path: str) -> str:
     """
@@ -84,7 +84,7 @@ def _transcribe_single_local(wav_path: str) -> str:
 
 
 # -----------------------
-# WORKER ТРЕД ЗА CHUNKS
+# WORKER THREAD FOR CHUNKS
 # -----------------------
 def chunk_worker(main_wav_path: str, task_queue: "queue.Queue", results: list):
     """
@@ -130,7 +130,7 @@ def chunk_worker(main_wav_path: str, task_queue: "queue.Queue", results: list):
 
 
 # -----------------------
-# LIVE ЗАПИС + ПАРАЛЕЛНА ТРАНСКРИПЦИЯ
+# LIVE RECORDING + PARALLEL TRANSCRIPTION
 # -----------------------
 def record_and_transcribe_live(
     filename: str = "meeting.wav",
@@ -146,7 +146,7 @@ def record_and_transcribe_live(
     task_queue: "queue.Queue" = queue.Queue()
     results = []
 
-    # Старт на worker треда за chunk-ове
+    # Chuks worker thread start
     worker = threading.Thread(
         target=chunk_worker,
         args=(filename, task_queue, results),
@@ -165,7 +165,7 @@ def record_and_transcribe_live(
                     f.write(data)
                     samples_written += len(data)
 
-                    # Проверяваме дали има цял завършен chunk
+                    # Check if we have a complete chunk
                     while samples_written >= (chunk_index + 1) * samples_per_chunk:
                         start_sec = chunk_index * chunk_seconds
                         end_sec = (chunk_index + 1) * chunk_seconds
@@ -179,7 +179,7 @@ def record_and_transcribe_live(
     total_duration = samples_written / samplerate if samplerate > 0 else 0.0
     print(f"Обща продължителност: {total_duration:.1f} секунди")
 
-    # Последен частичен chunk, ако има остатък
+    # Last partial chunk, if any
     remaining_sec = total_duration - chunk_index * chunk_seconds
     if remaining_sec > 1.0:
         start_sec = chunk_index * chunk_seconds
@@ -188,12 +188,12 @@ def record_and_transcribe_live(
         task_queue.put((chunk_index, start_sec, end_sec))
         chunk_index += 1
 
-    # Затваряме worker-а
+    # Closing the worker
     task_queue.put(None)
     task_queue.join()
     worker.join()
 
-    # Сортираме chunk-овете по индекс и ги лѐпиме
+    # Sorting chunks by index and assembling 
     results_sorted = [txt for idx, txt in sorted(results, key=lambda x: x[0])]
     transcript = "\n\n".join(results_sorted)
 
@@ -202,7 +202,7 @@ def record_and_transcribe_live(
 
 
 # -----------------------
-# ТРАНСКРИПЦИЯ НА СЪЩЕСТВУВАЩ WAV (без live)
+# EXISTING WAV FILE TRANSCRIPTION - NO LIVE RECORDING
 # -----------------------
 def transcribe_existing_wav(audio_path: str, chunk_seconds: int = CHUNK_SECONDS) -> str:
     """
