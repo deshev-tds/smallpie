@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark"> <!-- remove class="dark" to switch to light -->
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport"
@@ -21,33 +21,33 @@
     </div>
   </header>
 
+  <!-- BACKDROP (dismisses flow) -->
+  <div id="backdrop"
+       class="hidden fixed inset-0 bg-backdropDim transition-opacity"></div>
+
   <!-- MAIN CONTENT -->
   <main class="
     flex-1 max-w-3xl mx-auto w-full
     px-4 py-8 space-y-12
     md:py-10 md:space-y-12
-    lg:py-12 lg:space-y-14
+    lg:py-12 lg:space-y-16
   ">
 
     <!-- ACTION GRID -->
-    <section class="
-      grid grid-cols-1 md:grid-cols-2 gap-6
-      mt-6
-    ">
+    <section id="action-grid"
+      class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
 
       <!-- CARD: RECORD -->
       <div class="
         bg-white dark:bg-darkSurface
         border border-bgSubtle dark:border-darkBgSoft
         rounded-3xl shadow-md
-        p-6 flex flex-col items-center justify-center
-        text-center
+        p-6 flex flex-col items-center justify-center text-center
       ">
         <h2 class="text-lg font-medium text-forest dark:text-darkAccent mb-4">
           Record Audio
         </h2>
 
-        <!-- ROUND RECORD BUTTON -->
         <button id="start-recording"
           class="
             h-28 w-28 md:h-32 md:w-32 
@@ -55,8 +55,7 @@
             bg-gold text-forestDark
             border-4 border-forest
             ring-4 ring-gold/30 ring-offset-2 ring-offset-bg dark:ring-offset-darkBg
-            hover:ring-gold/50 active:scale-95
-            transition-all
+            hover:ring-gold/50 active:scale-95 transition-all
           ">
           <span class="text-base font-semibold">REC</span>
         </button>
@@ -71,8 +70,7 @@
         bg-white dark:bg-darkSurface
         border border-bgSubtle dark:border-darkBgSoft
         rounded-3xl shadow-md
-        p-6 flex flex-col items-center justify-center
-        text-center
+        p-6 flex flex-col items-center justify-center text-center
       ">
         <h2 class="text-lg font-medium text-forest dark:text-darkAccent mb-4">
           Upload Audio File
@@ -96,68 +94,66 @@
 
     </section>
 
-    <!-- BOTTOM SHEET FORM SECTION -->
-    <section id="form-section" class="
-      hidden
-      fixed left-0 right-0 bottom-0
-      bg-white dark:bg-darkSurface
-      border-t border-bgSubtle dark:border-darkBgSoft
-      rounded-t-3xl shadow-2xl
-      p-6 space-y-6
-      max-w-3xl mx-auto
-      transition
-    ">
+    <!-- FLOW CONTAINER (all dynamic UI goes here) -->
+    <section id="flow-container" class="relative w-full"></section>
+
+  </main>
+
+  <!-- TEMPLATES MOVED HERE -->
+
+  <!-- BOTTOM SHEET: FORM -->
+  <template id="tmpl-form-section">
+    <div
+      class="
+        fixed left-0 right-0 bottom-0
+        bg-white dark:bg-darkSurface
+        border-t border-bgSubtle dark:border-darkBgSoft
+        rounded-t-3xl shadow-2xl
+        p-6 space-y-6 max-w-3xl mx-auto
+      ">
       <h3 class="text-lg font-semibold text-forest dark:text-darkAccent text-center">
         Meeting Details
       </h3>
 
       <div class="space-y-5">
-
         <label class="block">
           <span class="text-sm font-medium text-forest dark:text-darkAccent">Meeting Name</span>
-          <input id="meeting-name" type="text"
-            class="
-              block w-full mt-2 rounded-lg 
-              border border-bgSubtle dark:border-darkBgSoft
-              bg-white dark:bg-darkSurface 
-              text-text dark:text-darkText 
-              p-3 
-              focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
-              focus:border-gold dark:focus:border-darkAccent
-              focus:outline-none
-            " />
+          <input id="meeting-name" type="text" class="
+            block w-full mt-2 rounded-lg 
+            border border-bgSubtle dark:border-darkBgSoft
+            bg-white dark:bg-darkSurface 
+            text-text dark:text-darkText 
+            p-3 focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
+            focus:border-gold dark:focus:border-darkAccent
+            focus:outline-none
+          " />
         </label>
 
         <label class="block">
           <span class="text-sm font-medium text-forest dark:text-darkAccent">Topic</span>
-          <input id="meeting-topic" type="text"
-            class="
-              block w-full mt-2 rounded-lg 
-              border border-bgSubtle dark:border-darkBgSoft
-              bg-white dark:bg-darkSurface 
-              text-text dark:text-darkText 
-              p-3 
-              focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
-              focus:border-gold dark:focus:border-darkAccent
-              focus:outline-none
-            " />
+          <input id="meeting-topic" type="text" class="
+            block w-full mt-2 rounded-lg 
+            border border-bgSubtle dark:border-darkBgSoft
+            bg-white dark:bg-darkSurface 
+            text-text dark:text-darkText 
+            p-3 focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
+            focus:border-gold dark:focus:border-darkAccent
+            focus:outline-none
+          " />
         </label>
 
         <label class="block">
           <span class="text-sm font-medium text-forest dark:text-darkAccent">Participants</span>
-          <input id="meeting-participants" type="number"
-            class="
-              block w-full mt-2 rounded-lg 
-              border border-bgSubtle dark:border-darkBgSoft
-              bg-white dark:bg-darkSurface 
-              text-text dark:text-darkText 
-              p-3 
-              focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
-              focus:border-gold dark:focus:border-darkAccent
-              focus:outline-none
-            " />
+          <input id="meeting-participants" type="number" class="
+            block w-full mt-2 rounded-lg 
+            border border-bgSubtle dark:border-darkBgSoft
+            bg-white dark:bg-darkSurface 
+            text-text dark:text-darkText 
+            p-3 focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
+            focus:border-gold dark:focus:border-darkAccent
+            focus:outline-none
+          " />
         </label>
-
       </div>
 
       <button id="begin-flow"
@@ -170,14 +166,16 @@
         ">
         Continue
       </button>
-    </section>
+    </div>
+  </template>
 
-    <!-- FILE UPLOAD SECTION -->
-    <section id="file-upload-section" class="hidden space-y-6
+  <!-- UPLOAD SECTION TEMPLATE -->
+  <template id="tmpl-file-upload-section">
+    <div class="
       bg-white dark:bg-darkSurface
       border border-bgSubtle dark:border-darkBgSoft
       rounded-3xl shadow-sm
-      p-6
+      p-6 space-y-6 mt-6
     ">
       <label class="block">
         <span class="text-sm font-medium text-forest dark:text-darkAccent">Choose Audio File</span>
@@ -188,8 +186,7 @@
             border border-bgSubtle dark:border-darkBgSoft
             bg-white dark:bg-darkSurface 
             text-text dark:text-darkText 
-            p-3 
-            focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
+            p-3 focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
             focus:border-gold dark:focus:border-darkAccent
             focus:outline-none
           "/>
@@ -201,20 +198,22 @@
           bg-gold text-forestDark 
           text-lg font-medium shadow-sm hover:bg-goldSoft 
           active:scale-[0.98] transition
-          dark:bg-darkSurface dark:text-darkAccent dark:hover:bg-darkBgSoft">
+          dark:bg-darkSurface dark:text-darkAccent dark:hover:bg-darkBgSoft
+        ">
         Upload & Process
       </button>
-    </section>
+    </div>
+  </template>
 
-    <!-- STATUS CARD -->
-    <section id="status" class="hidden text-center py-8">
+  <!-- STATUS TEMPLATE -->
+  <template id="tmpl-status">
+    <div class="text-center py-10">
       <div id="status-text"
-        class="text-forest dark:text-darkAccent text-lg font-medium">
+           class="text-forest dark:text-darkAccent text-lg font-medium">
         Processing...
       </div>
-    </section>
-
-  </main>
+    </div>
+  </template>
 
   <script type="module" src="src/main.js"></script>
 </body>
