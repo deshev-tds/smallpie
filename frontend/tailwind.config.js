@@ -30,9 +30,11 @@ module.exports = {
         darkAccent: "#C9A227",
 
         /* Misc */
-        backdropDim: "rgba(0,0,0,0.45)"
+        backdropDim: "rgba(0,0,0,0.45)",
+        danger: "#E45858",
+        success: "#3BAA72",
+        warning: "#E6A93B"
       },
-
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"]
       }
