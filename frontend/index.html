@@ -1,86 +1,77 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>smallpie</title>
-    <link rel="stylesheet" href="src/styles/base.css" />
-  </head>
-  <body class="bg-smallpie-cream text-smallpie-dark font-sans min-h-screen flex flex-col">
-    <header class="py-6 border-b border-neutral-300">
-      <div class="max-w-xl mx-auto text-center px-4">
-        <h1 class="text-3xl font-semibold tracking-tight">smallpie</h1>
-        <p class="text-sm text-neutral-600 mt-1">
-          Meeting intelligence - but cute :3
-        </p>
-      </div>
-    </header>
+<body class="bg-bg text-text font-sans min-h-screen flex flex-col">
+  <header class="py-6 border-b border-[#2a2a2a] bg-forestDark/50 backdrop-blur">
+    <div class="max-w-xl mx-auto text-center px-4">
+      <h1 class="text-3xl font-semibold tracking-tight text-gold">smallpie</h1>
+      <p class="text-sm text-goldLight mt-1">
+        Meeting intelligence - but cute :3
+      </p>
+    </div>
+  </header>
 
-    <main class="flex-1 max-w-xl mx-auto w-full px-4 py-8 space-y-10">
+  <main class="flex-1 max-w-xl mx-auto w-full px-4 py-8 space-y-10">
 
-      <section class="space-y-4">
-        <h2 class="text-xl font-medium">What do you want to do?</h2>
+    <section class="space-y-4">
+      <h2 class="text-xl font-medium text-gold">What do you want to do?</h2>
 
-        <div class="grid gap-4">
-          <button id="start-recording"
-            class="w-full py-4 rounded-xl bg-smallpie-dark text-smallpie-cream text-lg font-medium active:opacity-80">
-            Record & Transcribe
-          </button>
-
-          <button id="use-file"
-            class="w-full py-4 rounded-xl bg-smallpie-accent text-white text-lg font-medium hover:bg-smallpie-accentHover active:opacity-80">
-            Upload an Audio File
-          </button>
-        </div>
-      </section>
-
-      <section id="form-section" class="hidden space-y-6">
-        <div class="space-y-4">
-          <label class="block">
-            <span class="text-sm font-medium">Meeting Name</span>
-            <input type="text" id="meeting-name"
-              class="block w-full mt-1 rounded-lg border border-neutral-300 bg-white p-3 focus:ring-2 focus:ring-smallpie-accent focus:outline-none" />
-          </label>
-
-          <label class="block">
-            <span class="text-sm font-medium">Topic</span>
-            <input type="text" id="meeting-topic"
-              class="block w-full mt-1 rounded-lg border border-neutral-300 bg-white p-3 focus:ring-2 focus:ring-smallpie-accent focus:outline-none" />
-          </label>
-
-          <label class="block">
-            <span class="text-sm font-medium">Participants</span>
-            <input type="number" id="meeting-participants"
-              class="block w-full mt-1 rounded-lg border border-neutral-300 bg-white p-3 focus:ring-2 focus:ring-smallpie-accent focus:outline-none" />
-          </label>
-        </div>
-
-        <button id="begin-flow"
-          class="w-full py-4 rounded-xl bg-smallpie-dark text-smallpie-cream text-lg font-medium active:opacity-80">
-          Continue
+      <div class="grid gap-4">
+        <button id="start-recording"
+          class="w-full py-4 rounded-xl bg-forest text-gold text-lg font-medium active:opacity-80 hover:bg-forestDark transition">
+          Record & Transcribe
         </button>
-      </section>
 
-      <section id="file-upload-section" class="hidden space-y-6">
+        <button id="use-file"
+          class="w-full py-4 rounded-xl bg-gold text-forestDark text-lg font-medium hover:bg-goldLight active:opacity-80 transition">
+          Upload an Audio File
+        </button>
+      </div>
+    </section>
+
+    <section id="form-section" class="hidden space-y-6">
+      <div class="space-y-4">
         <label class="block">
-          <span class="text-sm font-medium">Choose Audio File</span>
-          <input type="file" id="audio-file"
-            accept=".wav,.mp3,.m4a,.aac"
-            class="block w-full mt-1 rounded-lg border border-neutral-300 bg-white p-3 focus:ring-2 focus:ring-smallpie-accent focus:outline-none" />
+          <span class="text-sm font-medium text-gold">Meeting Name</span>
+          <input type="text" id="meeting-name"
+            class="block w-full mt-1 rounded-lg border border-forest bg-bgSubtle text-text p-3 focus:ring-2 focus:ring-gold focus:outline-none" />
         </label>
 
-        <button id="upload-file-btn"
-          class="w-full py-4 rounded-xl bg-smallpie-accent text-white text-lg font-medium hover:bg-smallpie-accentHover active:opacity-80">
-          Upload & Process
-        </button>
-      </section>
+        <label class="block">
+          <span class="text-sm font-medium text-gold">Topic</span>
+          <input type="text" id="meeting-topic"
+            class="block w-full mt-1 rounded-lg border border-forest bg-bgSubtle text-text p-3 focus:ring-2 focus:ring-gold focus:outline-none" />
+        </label>
 
-      <section id="status" class="hidden text-center py-6">
-        <div class="text-neutral-700 text-lg font-medium" id="status-text">Processing...</div>
-      </section>
+        <label class="block">
+          <span class="text-sm font-medium text-gold">Participants</span>
+          <input type="number" id="meeting-participants"
+            class="block w-full mt-1 rounded-lg border border-forest bg-bgSubtle text-text p-3 focus:ring-2 focus:ring-gold focus:outline-none" />
+        </label>
+      </div>
 
-    </main>
+      <button id="begin-flow"
+        class="w-full py-4 rounded-xl bg-forest text-gold text-lg font-medium active:opacity-80 hover:bg-forestDark transition">
+        Continue
+      </button>
+    </section>
 
-    <script type="module" src="src/main.js"></script>
-  </body>
-</html>
+    <section id="file-upload-section" class="hidden space-y-6">
+      <label class="block">
+        <span class="text-sm font-medium text-gold">Choose Audio File</span>
+        <input type="file" id="audio-file"
+          accept=".wav,.mp3,.m4a,.aac"
+          class="block w-full mt-1 rounded-lg border border-forest bg-bgSubtle text-text p-3 focus:ring-2 focus:ring-gold focus:outline-none" />
+      </label>
+
+      <button id="upload-file-btn"
+        class="w-full py-4 rounded-xl bg-gold text-forestDark text-lg font-medium hover:bg-goldLight active:opacity-80 transition">
+        Upload & Process
+      </button>
+    </section>
+
+    <section id="status" class="hidden text-center py-6">
+      <div class="text-goldLight text-lg font-medium" id="status-text">Processing...</div>
+    </section>
+
+  </main>
+
+  <script type="module" src="src/main.js"></script>
+</body>
