@@ -1,1 +1,47 @@
-.
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-pipe-bg text-white">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>smallpipe v0.5</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body class="h-full flex flex-col items-center p-4">
+
+  <div class="w-full max-w-lg mt-6 space-y-6">
+
+    <!-- Header -->
+    <header class="text-center space-y-2">
+      <h1 class="text-3xl font-semibold tracking-tight">smallpipe</h1>
+      <p class="text-sm text-gray-400">v0.5 – responsive frontend</p>
+    </header>
+
+    <!-- Mode Selector -->
+    <div class="bg-pipe-card p-4 rounded-xl shadow-lg space-y-3">
+      <h2 class="text-lg font-medium">Какво правим днес?</h2>
+
+      <div class="flex flex-col space-y-2">
+        <button id="modeRecord"
+          class="w-full py-3 rounded-lg bg-pipe-accent text-black font-medium hover:opacity-90 transition">
+          Записвай и транскрибирай
+        </button>
+
+        <button id="modeUpload"
+          class="w-full py-3 rounded-lg bg-pipe-accent2 text-black font-medium hover:opacity-90 transition">
+          Качи вече записан файл
+        </button>
+      </div>
+    </div>
+
+    <!-- Dynamic Form Container -->
+    <div id="formContainer" class="bg-pipe-card p-4 rounded-xl shadow-lg hidden"></div>
+
+    <!-- Log Window (for websocket status / debug) -->
+    <div id="logWindow" class="hidden bg-black/40 p-3 rounded-lg text-sm h-40 overflow-y-auto font-mono"></div>
+
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
