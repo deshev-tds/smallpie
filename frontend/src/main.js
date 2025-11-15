@@ -1,4 +1,4 @@
-import "./styles/base.css";
+import "/src/styles/base.css";
 const btnStart = document.getElementById("start-recording");
 const btnUseFile = document.getElementById("use-file");
 const formSection = document.getElementById("form-section");
