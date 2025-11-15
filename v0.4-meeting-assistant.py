@@ -207,7 +207,7 @@ def record_and_transcribe_live(
 def transcribe_existing_wav(audio_path: str, chunk_seconds: int = CHUNK_SECONDS) -> str:
     """
     Ако има вече записан WAV файл – режем го на части и ги транскрибираме последователно.
-    Няма паралелен запис тук, само chunk → whisper → chunk → whisper.
+    Няма паралелен запис тук, само chunk -> whisper -> chunk -> whisper.
     """
     print("Транскрибирам съществуващ WAV чрез whisper.cpp...")
 
@@ -340,8 +340,8 @@ def update_traits(transcript, analysis):
     prompt = f"""
 You are maintaining a long-term behavioral and cognitive profile of the participants on this call.
 
-Your goal is NOT to describe his personality in vague adjectives, 
-but to extract stable, recurring *patterns of thinking, communication, decision-making, and collaboration*
+Your goal is NOT to describe their personality in vague adjectives, 
+but to extract stable, recurring *patterns* of thinking, communication, decision-making, and collaboration*
 that appear in this specific meeting.
 
 These traits must:
@@ -357,10 +357,10 @@ Produce **up to 5 bullet points**, each written as:
 **Pattern:**  
 A short, evidence-based description of a recurring behavior or cognitive style.  
 **Implications:**  
-A practical guideline for AI systems collaborating with him.
+A practical guideline for AI systems collaborating with the participants on improving their professional skills.
 
 After producing the 5 bullet points, internally generate a second, independent
-version of the same 5 points using a different reasoning path.
+version of the same 5 points using a different reasoning pathway.
 Then compute a "self-consistency score" for each point:
 
 Score 1–5:
@@ -400,7 +400,7 @@ Use exactly this style.
 # MAIN
 # -----------------------
 def main():
-    print("🧾 Meeting Assistant v4.0 – Live Local Whisper + Cloud GPT")
+    print("Meeting Assistant v0.4 – Live local whisper + Cloud GPT")
 
     meeting_name = input("Meeting name?\n> ")
     meeting_topic = input("Topic?\n> ")
@@ -418,7 +418,7 @@ def main():
             chunk_seconds=CHUNK_SECONDS,
         )
     else:
-        audio_path = input("📁 WAV file path:\n> ").strip()
+        audio_path = input("WAV file path:\n> ").strip()
         if not Path(audio_path).exists():
             print("File not found!")
             return
