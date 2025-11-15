@@ -23,12 +23,12 @@ TRAITS_FILE = "traits.txt"
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # How long a whisper chunk would be
-CHUNK_SECONDS = 1 * 60  
+CHUNK_SECONDS = 1 * 60 # За по-добър паралелизъм, ползваме малки чънкове 
 SAMPLE_RATE = 16000
 
 
 # -----------------------
-# RANDOM DELAY (ANTI-429 from Sam Altman)
+# RANDOM DELAY (анти-429 и други 4xx & 5xx от Sam Altman, неговото умами)
 # -----------------------
 def rand_delay(label=""):
     d = random.uniform(1.5, 5.0)
@@ -260,7 +260,7 @@ def transcribe_existing_wav(audio_path: str, chunk_seconds: int = CHUNK_SECONDS)
         start = end
 
     transcript = "\n\n".join(parts)
-    print("📄 Транскриптът е готов (offline file).")
+    print("Транскриптът е готов (offline file).")
     return transcript
 
 
@@ -335,7 +335,7 @@ def save_output(meeting_name, transcript, analysis):
 # -----------------------
 def update_traits(transcript, analysis):
     rand_delay("before traits")
-    print("Обновявам файл с лични traits...")
+    print("Обновявам файл с traits...")
 
     prompt = f"""
 You are maintaining a long-term behavioral and cognitive profile of the participants on this call.
