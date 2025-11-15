@@ -1,16 +1,22 @@
 module.exports = {
-  content: ["./index.html", "./main.js"],
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
   theme: {
     extend: {
       colors: {
-        pipe: {
-          bg: "#0f0f11",
-          card: "#1b1b1f",
-          accent: "#6f9cff",
-          accent2: "#46ffda",
-        }
-      }
-    }
+        smallpie: {
+          cream: "#faf7f2",
+          dark: "#1c1c1c",
+          accent: "#ff9f43",
+          accentHover: "#ff8c1c",
+        },
+      },
+      fontFamily: {
+        sans: ["Inter", "system-ui", "sans-serif"],
+      },
+    },
   },
   plugins: [],
 };
