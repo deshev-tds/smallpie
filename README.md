@@ -1,4 +1,4 @@
-# smallpie 🍰
+# smallpie
 Meeting intelligence — but cute.
 Version 0.5 (frontend + local Python pipeline)
 
