@@ -1,5 +1,6 @@
 # smallpie
 Meeting intelligence, but cute :3
+
 Version 0.5 (frontend + local Python pipeline)
 
 smallpie is a tiny, tasty, portable prototype that turns meetings into structured transcripts, analysis, and actionable items.
