@@ -3,7 +3,7 @@ Meeting intelligence, but cute :3
 
 Version 0.5 (frontend + local Python pipeline)
 
-smallpie is a tiny, browser-based (and explicity mobile-friendly), tasty, portable prototype that turns meetings into structured transcripts, analysis, and actionable items.
+smallpie is a tiny, browser-based (explicity mobile-friendly), tasty, portable prototype that turns meetings into structured transcripts, analysis, and actionable items.
 The system currently has two main components:
 
 - Frontend (Vite + Tailwind, mobile-friendly, runs anywhere)
