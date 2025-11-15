@@ -26,27 +26,6 @@ All of this lands in **v0.7+**.
 
 ------------------------------------------------------------
 
-## Folder Structure
-
-smallpie/
-  frontend/
-    index.html
-    main.js
-    tailwind.config.js
-    postcss.config.js
-    package.json
-    package-lock.json
-    src/
-      styles/
-        base.css
-      (other frontend assets)
-  backend/
-    (planned – not yet created)
-  python_pipeline/
-    (your Whisper + GPT script lives here, currently outside repo)
-
-------------------------------------------------------------
-
 ## Install & Run (Ubuntu 22+)
 
 Prereqs:
