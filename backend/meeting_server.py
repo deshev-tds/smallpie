@@ -514,13 +514,40 @@ async def websocket_endpoint(websocket: WebSocket):
     print("Client connected!")
 
     try:
+        # === FIRST MESSAGE: expect metadata JSON ===
+        first_msg = await websocket.receive()
+        meeting_name = "Untitled meeting"
+        meeting_topic = "Not specified"
+        participants = "Not specified"
+
+        if "text" in first_msg and first_msg["text"]:
+            import json
+            try:
+                meta = json.loads(first_msg["text"])
+                meeting_name = meta.get("meeting_name", meeting_name)
+                meeting_topic = meta.get("meeting_topic", meeting_topic)
+                participants = meta.get("participants", participants)
+                print("Received metadata:", meta)
+            except Exception as e:
+                print("Metadata parse error:", e)
+
+        # === Now accept audio chunks ===
         while True:
-            data = await websocket.receive_bytes()
-            print("Got chunk:", len(data))
-            await websocket.send_text("ACK")
+            msg = await websocket.receive()
+
+            if "bytes" in msg and msg["bytes"]:
+                data = msg["bytes"]
+                print("Got chunk:", len(data))
+                await websocket.send_text("ACK")
+
+            elif msg.get("type") == "websocket.disconnect":
+                print("Client disconnected")
+                break
+
     except WebSocketDisconnect:
         print("Client disconnected")
-
+    except Exception as e:
+        print("WS ERROR:", e)
 
 # ============================================================
 # OPTIONAL: CLI ENTRY POINT FOR MANUAL TESTING
