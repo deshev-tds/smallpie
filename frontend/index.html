@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark"> <!-- remove class="dark" to switch back to light mode -->
+<html lang="en" class="dark"> <!-- remove class="dark" to switch to light -->
 <head>
   <meta charset="UTF-8">
   <meta name="viewport"
@@ -9,7 +9,7 @@
 
 <body class="bg-bg text-text dark:bg-darkBg dark:text-darkText font-sans min-h-screen flex flex-col">
 
-  <!-- Header -->
+  <!-- HEADER -->
   <header class="py-6 border-b border-bgSubtle dark:border-darkBgSoft bg-bg dark:bg-darkSurface transition-colors">
     <div class="max-w-2xl mx-auto text-center px-4">
       <h1 class="text-3xl font-semibold tracking-tight text-forest dark:text-darkAccent">
@@ -21,99 +21,153 @@
     </div>
   </header>
 
-  <!-- MAIN -->
+  <!-- MAIN CONTENT -->
   <main class="
-    flex-1 max-w-2xl mx-auto w-full 
-    px-4 py-8 space-y-10
-    md:py-6 md:space-y-8
-    lg:py-4 lg:space-y-6
-    xl:py-2 xl:space-y-5
+    flex-1 max-w-3xl mx-auto w-full
+    px-4 py-8 space-y-12
+    md:py-10 md:space-y-12
+    lg:py-12 lg:space-y-14
   ">
 
-    <!-- ACTION SELECTION -->
+    <!-- ACTION GRID -->
     <section class="
-      space-y-6
-      bg-white dark:bg-darkSurface
-      border border-bgSubtle dark:border-darkBgSoft
-      rounded-2xl shadow-sm
-      p-6 md:p-8
+      grid grid-cols-1 md:grid-cols-2 gap-6
+      mt-6
     ">
-      <h2 class="text-xl font-medium text-forest dark:text-darkAccent">
-        What do you want to do?
-      </h2>
 
-      <div class="grid gap-6 place-items-center">
+      <!-- CARD: RECORD -->
+      <div class="
+        bg-white dark:bg-darkSurface
+        border border-bgSubtle dark:border-darkBgSoft
+        rounded-3xl shadow-md
+        p-6 flex flex-col items-center justify-center
+        text-center
+      ">
+        <h2 class="text-lg font-medium text-forest dark:text-darkAccent mb-4">
+          Record Audio
+        </h2>
 
-        <!-- ROUND RECORD BUTTON (Variant B) -->
-<button id="start-recording"
-  class="
-    h-24 w-24 md:h-28 md:w-28 
-    rounded-full flex items-center justify-center
-    bg-gold text-forestDark
-    border-4 border-forest
-    ring-4 ring-gold/30 ring-offset-2 ring-offset-darkBg
-    hover:ring-gold/50
-    active:scale-95
-    transition-all
-  ">
-  <span class="text-base font-semibold">REC</span>
-</button>
+        <!-- ROUND RECORD BUTTON -->
+        <button id="start-recording"
+          class="
+            h-28 w-28 md:h-32 md:w-32 
+            rounded-full flex items-center justify-center
+            bg-gold text-forestDark
+            border-4 border-forest
+            ring-4 ring-gold/30 ring-offset-2 ring-offset-bg dark:ring-offset-darkBg
+            hover:ring-gold/50 active:scale-95
+            transition-all
+          ">
+          <span class="text-base font-semibold">REC</span>
+        </button>
+
+        <p class="text-sm text-textMuted dark:text-darkMuted mt-4">
+          Tap to start recording
+        </p>
+      </div>
+
+      <!-- CARD: UPLOAD -->
+      <div class="
+        bg-white dark:bg-darkSurface
+        border border-bgSubtle dark:border-darkBgSoft
+        rounded-3xl shadow-md
+        p-6 flex flex-col items-center justify-center
+        text-center
+      ">
+        <h2 class="text-lg font-medium text-forest dark:text-darkAccent mb-4">
+          Upload Audio File
+        </h2>
 
         <button id="use-file"
-          class="w-full py-4 rounded-xl 
-                 bg-gold text-forestDark 
-                 shadow-sm hover:bg-goldSoft 
-                 active:scale-[0.98] transition
-                 dark:bg-darkSurface dark:text-darkAccent dark:hover:bg-darkBgSoft">
-          Upload an Audio File
+          class="
+            w-full py-4 rounded-xl 
+            bg-gold text-forestDark 
+            text-lg font-medium shadow-sm hover:bg-goldSoft 
+            active:scale-[0.98] transition
+            dark:bg-darkSurface dark:text-darkAccent dark:hover:bg-darkBgSoft
+          ">
+          Choose file
         </button>
+
+        <p class="text-sm text-textMuted dark:text-darkMuted mt-4">
+          Supported: WAV, MP3, M4A
+        </p>
       </div>
+
     </section>
 
-    <!-- FORM SECTION -->
-    <section id="form-section" class="hidden space-y-6
+    <!-- BOTTOM SHEET FORM SECTION -->
+    <section id="form-section" class="
+      hidden
+      fixed left-0 right-0 bottom-0
       bg-white dark:bg-darkSurface
-      border border-bgSubtle dark:border-darkBgSoft
-      rounded-2xl shadow-sm
-      p-6 md:p-8
+      border-t border-bgSubtle dark:border-darkBgSoft
+      rounded-t-3xl shadow-2xl
+      p-6 space-y-6
+      max-w-3xl mx-auto
+      transition
     ">
+      <h3 class="text-lg font-semibold text-forest dark:text-darkAccent text-center">
+        Meeting Details
+      </h3>
+
       <div class="space-y-5">
 
         <label class="block">
           <span class="text-sm font-medium text-forest dark:text-darkAccent">Meeting Name</span>
-          <input type="text" id="meeting-name"
-            class="block w-full mt-2 rounded-lg 
-                   border border-bgSubtle bg-white text-text 
-                   p-3 focus:ring-2 focus:ring-gold focus:border-gold focus:outline-none
-                   dark:bg-darkSurface dark:border-darkBgSoft dark:text-darkText dark:focus:ring-darkAccent" />
+          <input id="meeting-name" type="text"
+            class="
+              block w-full mt-2 rounded-lg 
+              border border-bgSubtle dark:border-darkBgSoft
+              bg-white dark:bg-darkSurface 
+              text-text dark:text-darkText 
+              p-3 
+              focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
+              focus:border-gold dark:focus:border-darkAccent
+              focus:outline-none
+            " />
         </label>
 
         <label class="block">
           <span class="text-sm font-medium text-forest dark:text-darkAccent">Topic</span>
-          <input type="text" id="meeting-topic"
-            class="block w-full mt-2 rounded-lg 
-                   border border-bgSubtle bg-white text-text 
-                   p-3 focus:ring-2 focus:ring-gold focus:border-gold focus:outline-none
-                   dark:bg-darkSurface dark:border-darkBgSoft dark:text-darkText dark:focus:ring-darkAccent" />
+          <input id="meeting-topic" type="text"
+            class="
+              block w-full mt-2 rounded-lg 
+              border border-bgSubtle dark:border-darkBgSoft
+              bg-white dark:bg-darkSurface 
+              text-text dark:text-darkText 
+              p-3 
+              focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
+              focus:border-gold dark:focus:border-darkAccent
+              focus:outline-none
+            " />
         </label>
 
         <label class="block">
           <span class="text-sm font-medium text-forest dark:text-darkAccent">Participants</span>
-          <input type="number" id="meeting-participants"
-            class="block w-full mt-2 rounded-lg 
-                   border border-bgSubtle bg-white text-text 
-                   p-3 focus:ring-2 focus:ring-gold focus:border-gold focus:outline-none
-                   dark:bg-darkSurface dark:border-darkBgSoft dark:text-darkText dark:focus:ring-darkAccent" />
+          <input id="meeting-participants" type="number"
+            class="
+              block w-full mt-2 rounded-lg 
+              border border-bgSubtle dark:border-darkBgSoft
+              bg-white dark:bg-darkSurface 
+              text-text dark:text-darkText 
+              p-3 
+              focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
+              focus:border-gold dark:focus:border-darkAccent
+              focus:outline-none
+            " />
         </label>
 
       </div>
 
       <button id="begin-flow"
-        class="w-full py-4 rounded-xl 
-               bg-forest text-white 
-               text-lg font-medium shadow-sm hover:bg-forestDark 
-               active:scale-[0.98] transition
-               dark:bg-darkAccent dark:text-darkBg dark:hover:bg-gold">
+        class="
+          w-full py-4 rounded-xl 
+          bg-forest text-white 
+          text-lg font-medium shadow-sm hover:bg-forestDark 
+          active:scale-[0.98] transition
+          dark:bg-darkAccent dark:text-darkBg dark:hover:bg-gold
+        ">
         Continue
       </button>
     </section>
@@ -122,32 +176,40 @@
     <section id="file-upload-section" class="hidden space-y-6
       bg-white dark:bg-darkSurface
       border border-bgSubtle dark:border-darkBgSoft
-      rounded-2xl shadow-sm
-      p-6 md:p-8
+      rounded-3xl shadow-sm
+      p-6
     ">
       <label class="block">
         <span class="text-sm font-medium text-forest dark:text-darkAccent">Choose Audio File</span>
-        <input type="file" id="audio-file"
+        <input id="audio-file" type="file"
           accept=".wav,.mp3,.m4a,.aac"
-          class="block w-full mt-2 rounded-lg 
-                 border border-bgSubtle bg-white text-text 
-                 p-3 focus:ring-2 focus:ring-gold focus:border-gold focus:outline-none
-                 dark:bg-darkSurface dark:border-darkBgSoft dark:text-darkText dark:focus:ring-darkAccent" />
+          class="
+            block w-full mt-2 rounded-lg 
+            border border-bgSubtle dark:border-darkBgSoft
+            bg-white dark:bg-darkSurface 
+            text-text dark:text-darkText 
+            p-3 
+            focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
+            focus:border-gold dark:focus:border-darkAccent
+            focus:outline-none
+          "/>
       </label>
 
       <button id="upload-file-btn"
-        class="w-full py-4 rounded-xl 
-               bg-gold text-forestDark 
-               text-lg font-medium shadow-sm hover:bg-goldSoft 
-               active:scale-[0.98] transition
-               dark:bg-darkSurface dark:text-darkAccent dark:hover:bg-darkBgSoft">
+        class="
+          w-full py-4 rounded-xl 
+          bg-gold text-forestDark 
+          text-lg font-medium shadow-sm hover:bg-goldSoft 
+          active:scale-[0.98] transition
+          dark:bg-darkSurface dark:text-darkAccent dark:hover:bg-darkBgSoft">
         Upload & Process
       </button>
     </section>
 
-    <!-- STATUS -->
+    <!-- STATUS CARD -->
     <section id="status" class="hidden text-center py-8">
-      <div class="text-forest dark:text-darkAccent text-lg font-medium" id="status-text">
+      <div id="status-text"
+        class="text-forest dark:text-darkAccent text-lg font-medium">
         Processing...
       </div>
     </section>
