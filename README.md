@@ -126,10 +126,13 @@ AI outputs should be treated as **assistive insights**, not authoritative truth.
 
 ### 5. Professional Profiles and Behavioral Insights
 If enabled, smallpie may generate communication-style or professional-development profiles for meeting participants. These profiles:
-- Are generated automatically by AI
-- Are intended **solely for personal growth and meeting improvement**
-- **Must not** be used as a way to perform, but not limited to, psychological assessments, HR evaluation tools, etc.
-- Must not be used to enable the following, but not limited to, actions: hiring, firing, promotion, disciplinary action, performance scoring, etc.
+- Are generated automatically by AI  
+- Are intended **solely for personal growth and meeting improvement**  
+- **Must not** be used in any way that resembles or could reasonably be interpreted as psychological evaluation, personality assessment, clinical judgment, HR analysis, employee monitoring, or any related practice  
+- Must not be used to support, justify, influence, or contribute to employment-related decisions - including, **but not limited to**, hiring, firing, promotion, demotion,
+  compensation, disciplinary measures, performance scoring, role assignment, or any other action that affects a person’s professional status, opportunities, or reputation  
+
+These restrictions apply **regardless of context, intent, or interpretation**.
 
 ### 6. Security and Transmission
 Audio is processed locally on the user's device before transmission.
