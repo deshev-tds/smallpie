@@ -11,7 +11,7 @@
 
   <!-- Header -->
   <header class="py-6 border-b border-bgSubtle dark:border-darkBgSoft bg-bg dark:bg-darkSurface transition-colors">
-    <div class="max-w-xl mx-auto text-center px-4">
+    <div class="max-w-2xl mx-auto text-center px-4">
       <h1 class="text-3xl font-semibold tracking-tight text-forest dark:text-darkAccent">
         smallpie
       </h1>
@@ -22,22 +22,42 @@
   </header>
 
   <!-- MAIN -->
-  <main class="flex-1 max-w-xl mx-auto w-full px-4 py-10 space-y-10">
+  <main class="
+    flex-1 max-w-2xl mx-auto w-full 
+    px-4 py-8 space-y-10
+    md:py-6 md:space-y-8
+    lg:py-4 lg:space-y-6
+    xl:py-2 xl:space-y-5
+  ">
 
     <!-- ACTION SELECTION -->
-    <section class="space-y-6">
+    <section class="
+      space-y-6
+      bg-white dark:bg-darkSurface
+      border border-bgSubtle dark:border-darkBgSoft
+      rounded-2xl shadow-sm
+      p-6 md:p-8
+    ">
       <h2 class="text-xl font-medium text-forest dark:text-darkAccent">
         What do you want to do?
       </h2>
 
-      <div class="grid gap-4">
+      <div class="grid gap-6 place-items-center">
+
+        <!-- ROUND RECORD BUTTON (Variant B) -->
         <button id="start-recording"
-          class="w-full py-4 rounded-xl 
-                 bg-forest text-white 
-                 shadow-sm hover:bg-forestDark 
-                 active:scale-[0.98] transition
-                 dark:bg-darkAccent dark:text-darkBg dark:hover:bg-gold">
-          Record & Transcribe
+          class="
+            h-24 w-24 md:h-28 md:w-28 
+            rounded-full
+            flex items-center justify-center
+            bg-gold text-forestDark
+            border-4 border-forest
+            shadow-lg shadow-gold/40
+            hover:bg-goldSoft hover:shadow-xl
+            active:scale-95
+            transition-all
+          ">
+          <span class="text-base font-semibold">REC</span>
         </button>
 
         <button id="use-file"
@@ -52,7 +72,12 @@
     </section>
 
     <!-- FORM SECTION -->
-    <section id="form-section" class="hidden space-y-6">
+    <section id="form-section" class="hidden space-y-6
+      bg-white dark:bg-darkSurface
+      border border-bgSubtle dark:border-darkBgSoft
+      rounded-2xl shadow-sm
+      p-6 md:p-8
+    ">
       <div class="space-y-5">
 
         <label class="block">
@@ -95,8 +120,12 @@
     </section>
 
     <!-- FILE UPLOAD SECTION -->
-    <section id="file-upload-section" class="hidden space-y-6">
-
+    <section id="file-upload-section" class="hidden space-y-6
+      bg-white dark:bg-darkSurface
+      border border-bgSubtle dark:border-darkBgSoft
+      rounded-2xl shadow-sm
+      p-6 md:p-8
+    ">
       <label class="block">
         <span class="text-sm font-medium text-forest dark:text-darkAccent">Choose Audio File</span>
         <input type="file" id="audio-file"
