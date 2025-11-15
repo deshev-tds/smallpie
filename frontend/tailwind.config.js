@@ -1,4 +1,5 @@
 module.exports = {
+  darkMode: "class",
   content: [
     "./index.html",
     "./*.js",
@@ -8,9 +9,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        /* ----------------------------------------------------
-           PREMIUM FOREST + GOLD (light mode)
-        ---------------------------------------------------- */
+        /* Light theme */
         forest: "#0B3D31",
         forestDark: "#042A23",
         gold: "#C9A227",
@@ -22,15 +21,13 @@ module.exports = {
         text: "#0E1311",
         textMuted: "#3F5047",
 
-        /* ----------------------------------------------------
-           DARK MODE PALETTE
-        ---------------------------------------------------- */
+        /* Dark mode */
         darkBg: "#0D1412",
         darkBgSoft: "#1A2320",
         darkSurface: "#161E1C",
         darkText: "#F2F3F0",
         darkMuted: "#9EAFA6",
-        darkAccent: "#C9A227"   /* gold remains the same, like it this way */
+        darkAccent: "#C9A227"
       },
 
       fontFamily: {
