@@ -9,7 +9,7 @@ module.exports = {
     extend: {
       colors: {
         /* ----------------------------------------------------
-           PREMIUM FOREST + GOLD (official smallpie palette)
+           PREMIUM FOREST + GOLD (light mode)
         ---------------------------------------------------- */
         forest: "#0B3D31",
         forestDark: "#042A23",
@@ -23,20 +23,14 @@ module.exports = {
         textMuted: "#3F5047",
 
         /* ----------------------------------------------------
-           SOFT GREEN MINIMAL (optional alt theme)
+           DARK MODE PALETTE
         ---------------------------------------------------- */
-        mint: "#DFF4EA",
-        mintDark: "#A7DCC4",
-        ink: "#1A1D1C",
-
-        /* ----------------------------------------------------
-           FOREST DARK MODE (optional)
-        ---------------------------------------------------- */
-        darkBg: "#101613",
+        darkBg: "#0D1412",
         darkBgSoft: "#1A2320",
+        darkSurface: "#161E1C",
         darkText: "#F2F3F0",
         darkMuted: "#9EAFA6",
-        accent: "#C9A227"
+        darkAccent: "#C9A227"   /* gold remains the same, like it this way */
       },
 
       fontFamily: {
