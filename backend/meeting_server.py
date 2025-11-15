@@ -434,71 +434,92 @@ async def upload_meeting_file(
     )
 
 
-@app.websocket("/ws/record")
-async def websocket_record(websocket: WebSocket):
-    """
-    WebSocket endpoint for streaming audio from the browser.
+# ============================================================
+# ORIGINAL STREAMING WS ENDPOINT (DISABLED FOR NOW)
+# ============================================================
+# @app.websocket("/ws/record")
+# async def websocket_record(websocket: WebSocket):
+#     """
+#     WebSocket endpoint for streaming audio from the browser.
+#
+#     Expected client behavior (matching your AudioWebSocket helper):
+#     - Connect to ws://<host>/ws/record?meeting_name=...&topic=...&participants=...
+#     - Send binary ArrayBuffer chunks from MediaRecorder via sendChunk(blob).
+#     - Close the websocket when recording stops.
+#
+#     Server behavior:
+#     - Accumulates chunks into a single .webm file under AUDIO_DIR.
+#     - When the socket closes, starts full_meeting_pipeline in a background thread.
+#     """
+#     await websocket.accept()
+#
+#     # Extract metadata from query params
+#     qp = websocket.query_params
+#     meeting_name = qp.get("meeting_name", "Untitled meeting")
+#     meeting_topic = qp.get("meeting_topic", "Not specified")
+#     participants = qp.get("participants", "Not specified")
+#
+#     meeting_id = uuid.uuid4().hex
+#     raw_path = AUDIO_DIR / f"{meeting_id}.webm"
+#
+#     print(f"[ws] new recording session meeting_id={meeting_id}")
+#     print(f"[ws] name={meeting_name} topic={meeting_topic} participants={participants}")
+#
+#     with raw_path.open("ab") as f:
+#         try:
+#             while True:
+#                 msg = await websocket.receive()
+#                 if "bytes" in msg and msg["bytes"] is not None:
+#                     f.write(msg["bytes"])
+#                 elif "text" in msg and msg["text"] is not None:
+#                     # Optional: handle a "STOP" text message if you ever send one
+#                     if msg["text"].strip().upper() == "STOP":
+#                         print("[ws] received explicit STOP message")
+#                         break
+#                 else:
+#                     # unknown type; ignore
+#                     pass
+#         except WebSocketDisconnect:
+#             print("[ws] client disconnected")
+#         except Exception as e:
+#             print(f"[ws] error while receiving audio: {e}", file=sys.stderr)
+#
+#     print(f"[ws] stored streamed audio at {raw_path}")
+#
+#     # Start the heavy pipeline in a background thread
+#     def _run():
+#         try:
+#             full_meeting_pipeline(raw_path, meeting_name, meeting_topic, participants, meeting_id)
+#         finally:
+#             # decide whether to delete raw_path or keep history
+#             pass
+#
+#     Thread(target=_run, daemon=True).start()
+#
+#     # Optionally inform client we accepted the recording
+#     try:
+#         await websocket.close()
+#     except RuntimeError:
+#         # already closed
+#         pass
 
-    Expected client behavior (matching your AudioWebSocket helper):
-    - Connect to ws://<host>/ws/record?meeting_name=...&topic=...&participants=...
-    - Send binary ArrayBuffer chunks from MediaRecorder via sendChunk(blob).
-    - Close the websocket when recording stops.
 
-    Server behavior:
-    - Accumulates chunks into a single .webm file under AUDIO_DIR.
-    - When the socket closes, starts full_meeting_pipeline in a background thread.
-    """
+# ============================================================
+# TEMP DEV WS ENDPOINT: ALWAYS ACCEPT + ACK
+# ============================================================
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    print("Client connected!")
 
-    # Extract metadata from query params
-    qp = websocket.query_params
-    meeting_name = qp.get("meeting_name", "Untitled meeting")
-    meeting_topic = qp.get("meeting_topic", "Not specified")
-    participants = qp.get("participants", "Not specified")
-
-    meeting_id = uuid.uuid4().hex
-    raw_path = AUDIO_DIR / f"{meeting_id}.webm"
-
-    print(f"[ws] new recording session meeting_id={meeting_id}")
-    print(f"[ws] name={meeting_name} topic={meeting_topic} participants={participants}")
-
-    with raw_path.open("ab") as f:
-        try:
-            while True:
-                msg = await websocket.receive()
-                if "bytes" in msg and msg["bytes"] is not None:
-                    f.write(msg["bytes"])
-                elif "text" in msg and msg["text"] is not None:
-                    # Optional: handle a "STOP" text message if you ever send one
-                    if msg["text"].strip().upper() == "STOP":
-                        print("[ws] received explicit STOP message")
-                        break
-                else:
-                    # unknown type; ignore
-                    pass
-        except WebSocketDisconnect:
-            print("[ws] client disconnected")
-        except Exception as e:
-            print(f"[ws] error while receiving audio: {e}", file=sys.stderr)
-
-    print(f"[ws] stored streamed audio at {raw_path}")
-
-    # Start the heavy pipeline in a background thread
-    def _run():
-        try:
-            full_meeting_pipeline(raw_path, meeting_name, meeting_topic, participants, meeting_id)
-        finally:
-            # decide whether to delete raw_path or keep history
-            pass
-
-    Thread(target=_run, daemon=True).start()
-
-    # Optionally inform client we accepted the recording
     try:
-        await websocket.close()
-    except RuntimeError:
-        # already closed
-        pass
+        while True:
+            data = await websocket.receive_bytes()
+            print("Got chunk:", len(data))
+            await websocket.send_text("ACK")
+    except WebSocketDisconnect:
+        print("Client disconnected")
 
 
 # ============================================================
