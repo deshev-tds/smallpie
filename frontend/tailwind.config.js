@@ -27,7 +27,10 @@ module.exports = {
         darkSurface: "#161E1C",
         darkText: "#F2F3F0",
         darkMuted: "#9EAFA6",
-        darkAccent: "#C9A227"
+        darkAccent: "#C9A227",
+
+        /* Misc */
+        backdropDim: "rgba(0,0,0,0.45)"
       },
 
       fontFamily: {
