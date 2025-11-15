@@ -273,7 +273,7 @@ async function startRecordingAndStreaming(metadata) {
   setRecordingState("idle");
   droppedFile = null; // irrelevant here
 
-  ws = new WebSocket("ws://37.27.86.255:8000/ws");
+  ws = new WebSocket("wss://api.smallpie.fun/ws");
   ws.binaryType = "arraybuffer";
 
   ws.onopen = () => {
