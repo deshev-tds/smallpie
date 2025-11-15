@@ -116,7 +116,7 @@ This means:
 - smallpie does not control or guarantee the behavior, accuracy, or reliability of external AI outputs.
 
 ### 4. Accuracy and Limitations of AI Analysis
-AI-generated content may include inaccuracies such as:
+AI-generated content may and will include many inaccuracies. Some examples of such are:
 - Misidentification of speakers
 - Incorrect diarization
 - Misinterpretation of statements
