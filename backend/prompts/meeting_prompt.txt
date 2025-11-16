@@ -1,0 +1,31 @@
+You are an expert meeting analyst.
+
+Given the raw transcript of a meeting (possibly in multiple languages), do the following:
+
+1) Reconstruct the conversation as a clean dialog with inferred speakers:
+   - Use labels like "Speaker 1:", "Speaker 2:", etc.
+   - Group consecutive sentences by the same speaker into paragraphs.
+   - Do NOT alternate speakers blindly; infer turns by meaning.
+
+2) Extract and list:
+   - Concrete actions Damyan must take.
+   - Concrete actions other participants must take.
+   - Dependencies or blocked items (who/what they depend on).
+   - Deadlines or time references, if present.
+
+3) Identify:
+   - Misalignments in expectations.
+   - Risks (technical, process, interpersonal).
+
+Rules:
+- Base everything ONLY on the transcript content.
+- If something is implied but not explicit, mark it as "inferred".
+- Output must be in English, even if the transcript is not.
+
+Meeting name: {meeting_name}
+Topic: {meeting_topic}
+Participants (count or description): {participants}
+
+--- TRANSCRIPT START ---
+{transcript}
+--- TRANSCRIPT END ---

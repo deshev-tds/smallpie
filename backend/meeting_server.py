@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 """
-smallpie backend v0.5 – Meeting server
-
-- Accepts WebSocket audio streams from the frontend and turns them into meeting transcripts + analysis.
-- Accepts uploaded audio files via HTTP and processes them the same way.
-- Uses local whisper.cpp (whisper-cli) for transcription with chunking.
-- Uses GPT-5.1 for meeting analysis and trait extraction.
+smallpie backend v0.7.2 – Meeting server
 """
 
 import os
@@ -44,10 +39,16 @@ WHISPER_THREADS = 6  # on 8-core VPS, leaves some headroom for OS / FastAPI
 BASE_DIR = Path("/root/smallpie-data").resolve()
 AUDIO_DIR = BASE_DIR / "audio"
 MEETINGS_DIR = BASE_DIR / "meetings"
+PROMPTS_DIR = BASE_DIR / "prompts"
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 MEETINGS_DIR.mkdir(parents=True, exist_ok=True)
+PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
 
 TRAITS_FILE = BASE_DIR / "damyan_traits.txt"
+
+# Prompt files
+MEETING_PROMPT_FILE = PROMPTS_DIR / "meeting_prompt.txt"
+TRAIT_PROMPT_FILE = PROMPTS_DIR / "trait_prompt.txt"
 
 # OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -215,6 +216,19 @@ def transcribe_with_whisper_local(audio_file: Path) -> str:
     return transcript
 
 
+def load_prompt(path: Path) -> str:
+    """
+    Load a prompt template from a text file.
+    The file content is expected to contain .format-style placeholders
+    such as {meeting_name}, {transcript}, {analysis}, etc.
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        print(f"[prompt] file not found: {path}", file=sys.stderr)
+        return ""
+
+
 def analyze_with_gpt(meeting_name: str, meeting_topic: str, participants: str, transcript: str) -> str:
     """
     Meeting analysis: diarized-style reconstruction, action items, risks.
@@ -223,39 +237,13 @@ def analyze_with_gpt(meeting_name: str, meeting_topic: str, participants: str, t
     rand_delay("before GPT analysis")
     print("[gpt] starting meeting analysis")
 
-    prompt = f"""
-You are an expert meeting analyst.
-
-Given the raw transcript of a meeting (possibly in multiple languages), do the following:
-
-1) Reconstruct the conversation as a clean dialog with inferred speakers:
-   - Use labels like "Speaker 1:", "Speaker 2:", etc.
-   - Group consecutive sentences by the same speaker into paragraphs.
-   - Do NOT alternate speakers blindly; infer turns by meaning.
-
-2) Extract and list:
-   - Concrete actions Damyan must take.
-   - Concrete actions other participants must take.
-   - Dependencies or blocked items (who/what they depend on).
-   - Deadlines or time references, if present.
-
-3) Identify:
-   - Misalignments in expectations.
-   - Risks (technical, process, interpersonal).
-
-Rules:
-- Base everything ONLY on the transcript content.
-- If something is implied but not explicit, mark it as "inferred".
-- Output must be in English, even if the transcript is not.
-
-Meeting name: {meeting_name}
-Topic: {meeting_topic}
-Participants (count or description): {participants}
-
---- TRANSCRIPT START ---
-{transcript}
---- TRANSCRIPT END ---
-"""
+    base_prompt = load_prompt(MEETING_PROMPT_FILE)
+    prompt = base_prompt.format(
+        meeting_name=meeting_name,
+        meeting_topic=meeting_topic,
+        participants=participants,
+        transcript=transcript,
+    )
 
     resp = client.responses.create(
         model="gpt-5.1",
@@ -275,54 +263,11 @@ def update_traits(transcript: str, analysis: str):
     rand_delay("before traits")
     print("[traits] updating traits file")
 
-    trait_prompt = f"""
-You are maintaining a long-term behavioral and cognitive profile of a single person: Damyan.
-
-Your goal is NOT to describe his personality in general terms, but to extract stable,
-recurring patterns of thinking, communication, decision-making, and collaboration
-that appear across this specific meeting transcript.
-
-These traits must:
-- be grounded ONLY in evidence from the transcript + analysis
-- describe patterns, not one-off moments
-- be phrased as practical insights that future AI assistants can use to work with him effectively
-- avoid psychological diagnoses or speculation
-- avoid praise, value-judgments, or flattery
-- avoid overgeneralizing beyond the evidence
-
-Produce up to 5 bullet points, each written as:
-
-**Pattern:**  
-A short, evidence-based description of a recurring behavior or cognitive style.  
-**Implications:**  
-A practical guideline for AI systems collaborating with him.
-
-Example format (not content):
-- **Pattern:** Tends to organize information linearly when uncertain.  
-  **Implications:** Provide responses with clear sequencing and minimal ambiguity.
-
-After producing the 5 bullet points, generate a second independent
-version of the same 5 points using a different internal reasoning path.
-Then compute a "self-consistency score" for each point:
-
-Score 1–5:
-1 = the two versions diverge strongly
-5 = the two versions describe the same pattern
-
-Return the final bullet points with their self-consistency scores. 
-
-For each bullet point, add a "Stability Score" (1–5):
-1 = possibly situational or one-off
-5 = highly likely to be a recurring pattern across multiple future meetings
-
-Use this exact style.
-
-TRANSCRIPT:
-{transcript}
-
-ANALYSIS:
-{analysis}
-"""
+    base_prompt = load_prompt(TRAIT_PROMPT_FILE)
+    trait_prompt = base_prompt.format(
+        transcript=transcript,
+        analysis=analysis,
+    )
 
     resp = client.responses.create(
         model="gpt-5.1",
@@ -439,66 +384,6 @@ async def upload_meeting_file(
             "message": "File received. Processing will continue in the background.",
         }
     )
-
-
-# ============================================================
-# ORIGINAL STREAMING WS ENDPOINT (FOR REFERENCE, PATH /ws/record)
-# ============================================================
-# @app.websocket("/ws/record")
-# async def websocket_record_legacy(websocket: WebSocket):
-#     """
-#     Legacy WebSocket endpoint for streaming audio from the browser.
-#
-#     Expected client behavior:
-#     - Connect to ws://<host>/ws/record?meeting_name=...&topic=...&participants=...
-#     - Send binary ArrayBuffer chunks from MediaRecorder via sendChunk(blob).
-#     - Close the websocket or send "STOP" when recording stops.
-#     """
-#     await websocket.accept()
-#
-#     # Extract metadata from query params
-#     qp = websocket.query_params
-#     meeting_name = qp.get("meeting_name", "Untitled meeting")
-#     meeting_topic = qp.get("meeting_topic", "Not specified")
-#     participants = qp.get("participants", "Not specified")
-#
-#     meeting_id = uuid.uuid4().hex
-#     raw_path = AUDIO_DIR / f"{meeting_id}.webm"
-#
-#     print(f"[ws] new recording session meeting_id={meeting_id}")
-#     print(f"[ws] name={meeting_name} topic={meeting_topic} participants={participants}")
-#
-#     with raw_path.open("ab") as f:
-#         try:
-#             while True:
-#                 msg = await websocket.receive()
-#                 if "bytes" in msg and msg["bytes"] is not None:
-#                     f.write(msg["bytes"])
-#                 elif "text" in msg and msg["text"] is not None:
-#                     if msg["text"].strip().upper() == "STOP":
-#                         print("[ws] received explicit STOP message")
-#                         break
-#                 else:
-#                     pass
-#         except WebSocketDisconnect:
-#             print("[ws] client disconnected")
-#         except Exception as e:
-#             print(f"[ws] error while receiving audio: {e}", file=sys.stderr)
-#
-#     print(f"[ws] stored streamed audio at {raw_path}")
-#
-#     def _run():
-#         try:
-#             full_meeting_pipeline(raw_path, meeting_name, meeting_topic, participants, meeting_id)
-#         finally:
-#             pass
-#
-#     Thread(target=_run, daemon=True).start()
-#
-#     try:
-#         await websocket.close()
-#     except RuntimeError:
-#         pass
 
 
 # ============================================================
