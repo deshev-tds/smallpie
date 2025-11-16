@@ -505,7 +505,7 @@ def full_meeting_pipeline(
 
     print(f"[pipeline] starting full pipeline for meeting_id={meeting_id}")
 
-    transcript = transcribe_with_whisper_local(audio_path)
+    transcript = transcribe_with_whisper_local(audio_file)
     analysis = analyze_with_gpt(meeting_name, meeting_topic, participants, transcript)
     folder = save_meeting_outputs(meeting_id, meeting_name, transcript, analysis)
     update_traits(transcript, analysis)
@@ -695,12 +695,32 @@ def live_transcription_orchestrator(
         print("[orchestrator] processing final audio segment...")
         start_sec = chunk_index * CHUNK_SECONDS
         
-        # Give a moment for the file to be fully flushed
-        time.sleep(0.5) 
-        
-        # Extract from the last chunk start to the very end (end_sec=None)
-        wav_chunk_path = extract_wav_segment(raw_path, start_sec, None)
-        
+        # === FIX 3: Robust retry loop for final segment extraction ===
+        wav_chunk_path = None
+        # Try up to 3 times to extract a *valid* final segment
+        for i in range(3):
+            wav_chunk_path = extract_wav_segment(raw_path, start_sec, None)
+            if wav_chunk_path:
+                # Check if the *resulting* wav is valid by probing its duration
+                duration = run_ffprobe_duration(wav_chunk_path)
+                if duration > 0.0:
+                    print(f"[orchestrator] final segment attempt {i+1} successful (duration: {duration}s)")
+                    break # Success!
+                else:
+                    # File was extracted but is empty/corrupt
+                    print(f"[orchestrator] final segment attempt {i+1} gave empty/invalid WAV, retrying...")
+                    try:
+                        wav_chunk_path.unlink() # Delete the bad file
+                    except FileNotFoundError:
+                        pass
+                    wav_chunk_path = None
+                    time.sleep(0.75) # Wait for filesystem
+            else:
+                # Extraction itself failed
+                print(f"[orchestrator] final segment attempt {i+1} failed to extract, retrying...")
+                time.sleep(0.75) # Wait for filesystem
+        # ==============================================================
+
         if wav_chunk_path:
             print(f"[orchestrator] successfully extracted final segment {chunk_index} (from {start_sec}s to end)")
             t = threading.Thread(
@@ -711,7 +731,7 @@ def live_transcription_orchestrator(
             t.start()
             processing_threads.append(t)
         else:
-            print(f"[orchestrator] no final segment to process (from {start_sec}s)")
+            print(f"[orchestrator] no final segment to process (from {start_sec}s) after 3 attempts")
 
         # --- Wait for all transcription threads and run analysis ---
         print(f"[orchestrator] waiting for {len(processing_threads)} chunk(s) to finish... (queue is managed by semaphore)")
@@ -995,7 +1015,7 @@ def cli_main():
 
     audio_path = Path(sys.argv[1]).resolve()
     if not audio_path.exists():
-        print(f"File not found: {audio_chupath}")
+        print(f"File not found: {audio_path}")
         sys.exit(1)
 
     meeting_name = sys.argv[2] if len(sys.argv) > 2 else "CLI test meeting"
