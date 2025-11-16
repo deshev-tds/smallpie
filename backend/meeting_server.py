@@ -693,4 +693,4 @@ if __name__ == "__main__":
         cli_main()
     else:
         print("This module is intended to be run with uvicorn as an ASGI app, e.g.:")
-        print("  uvicorn meeting_server:app --host 0.0.0.0 --port 8000")
+        print("  uvicorn meeting_server:app --host 0.0.0.0 --port 8000")    
