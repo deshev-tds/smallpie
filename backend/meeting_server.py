@@ -464,28 +464,7 @@ async def upload_meeting_file(
 
 @app.websocket("/ws")
 async def websocket_record(websocket: WebSocket):
-    """
-    WebSocket endpoint for streaming audio from the browser.
-
-    Current expected client behavior (matching the Vite frontend):
-    - Connect to wss://api.smallpie.fun/ws
-    - On open, send a JSON text message:
-        { "type": "metadata",
-          "meeting_name": "...",
-          "meeting_topic": "...",
-          "participants": "..." }
-      (older clients may send query params instead; both are supported)
-    - Then send binary audio chunks (ArrayBuffer) while recording.
-    - On stop, send a text message "END" or "STOP", then close the socket.
-
-    Server behavior:
-    - Resolves meeting_name/topic/participants from:
-        1) metadata JSON (if present)
-        2) or query params as fallback
-    - Streams all binary chunks into a single .webm file.
-    - When receiving END/STOP or disconnect, starts full_meeting_pipeline
-      in a background thread.
-    """
+ 
     # Auth via ?token=... in query params (only enforced if SMALLPIE_ACCESS_TOKEN is set)
     qp = websocket.query_params
     ws_token = qp.get("token")
