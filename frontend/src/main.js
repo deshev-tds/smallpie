@@ -91,6 +91,7 @@ function setRecordingState(state) {
 
     case "recording":
       recButton.classList.add("animate-pulse");
+      recButton.classList.remove("opacity-70", "cursor-not-allowed");
       recButton.disabled = false;
       recordLabel.textContent = "STOP";
       recordHelper.textContent = "Recording… tap STOP when you’re done.";
@@ -111,11 +112,12 @@ function setRecordingState(state) {
       recButton.disabled = false;
       recordLabel.textContent = "REC";
       recordHelper.textContent = "Recording finished. Tap REC to start a new one.";
+      recordTimerEl.classList.add("hidden");
       stopRecordingTimer();
       break;
 
     case "error":
-      recButton.classList.remove("animate-pulse");
+      recButton.classList.remove("animate-pulse", "opacity-70", "cursor-not-allowed");
       recButton.disabled = false;
       recordLabel.textContent = "REC";
       recordHelper.textContent = "Something went wrong. You can try again.";
@@ -176,6 +178,7 @@ function wireDynamicHandlers() {
       } catch (err) {
         console.error(err);
         if (statusText) statusText.innerText = "Error starting recording.";
+        if (statusSubtext) statusSubtext.innerText = "Please try again.";
         setRecordingState("error");
       }
     };
@@ -305,58 +308,70 @@ async function startRecordingAndStreaming(metadata) {
     setRecordingState("error");
   };
 
+  // In current backend, no messages are sent back,
+  // but keep handler for future use.
   ws.onmessage = (msg) => {
-    const data = JSON.parse(msg.data);
+    try {
+      const data = JSON.parse(msg.data);
 
-    if (data.type === "final_transcript") {
-      const statusText = document.getElementById("status-text");
-      const statusSubtext = document.getElementById("status-subtext");
-      if (statusText) statusText.innerText = "All done.";
-      if (statusSubtext) statusSubtext.innerText = "Your transcript and notes have been generated.";
-      setRecordingState("finished");
-      stopRecording();
+      if (data.type === "final_transcript") {
+        const statusText = document.getElementById("status-text");
+        const statusSubtext = document.getElementById("status-subtext");
+        if (statusText) statusText.innerText = "All done.";
+        if (statusSubtext) statusSubtext.innerText = "Your transcript and notes have been generated.";
+        setRecordingState("finished");
+      }
+
+      if (data.type === "error") {
+        const statusText = document.getElementById("status-text");
+        const statusSubtext = document.getElementById("status-subtext");
+        if (statusText) statusText.innerText = "Server error.";
+        if (statusSubtext) statusSubtext.innerText = data.message || "Something went wrong on our side.";
+        setRecordingState("error");
+      }
+    } catch (e) {
+      console.warn("Non-JSON message from WS:", msg.data);
     }
+  };
 
-    if (data.type === "error") {
+  ws.onclose = () => {
+    if (recordingState === "finishing") {
+      // No more data, consider session closed from UI side
       const statusText = document.getElementById("status-text");
       const statusSubtext = document.getElementById("status-subtext");
-      if (statusText) statusText.innerText = "Server error.";
-      if (statusSubtext) statusSubtext.innerText = data.message || "Something went wrong on our side.";
-      setRecordingState("error");
-      stopRecording();
+      if (statusText) statusText.innerText = "Audio sent for processing.";
+      if (statusSubtext) statusSubtext.innerText = "You can close this tab. Your notes will be generated in the background.";
+      setRecordingState("finished");
     }
   };
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-mediaRecorder = new MediaRecorder(stream, {
-  mimeType: "audio/webm;codecs=opus"
-});
+    mediaRecorder = new MediaRecorder(stream, {
+      mimeType: "audio/webm;codecs=opus",
+    });
 
-mediaRecorder.start();  
-
-setInterval(() => {
-  if (mediaRecorder.state === "recording") {
-    mediaRecorder.requestData(); 
-  }
-}, 300);
-
-mediaRecorder.ondataavailable = (e) => {
-  e.data.arrayBuffer().then(buf => {
-    ws.send(buf);
-  });
-};
-
-    mediaRecorder.onstop = () => {
-      if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "end" }));
+    mediaRecorder.ondataavailable = (e) => {
+      if (ws && ws.readyState === WebSocket.OPEN && e.data && e.data.size > 0) {
+        e.data.arrayBuffer().then((buf) => {
+          ws.send(buf);
+        });
       }
     };
 
+    mediaRecorder.onstop = () => {
+      // When recording stops, tell backend we're done and close WS
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "end" }));
+        ws.close();
+      }
+    };
+
+    // Single start: use timeslice 300ms to emit data regularly
     mediaRecorder.start(300);
   } catch (err) {
-    console.error("getUserMedia error:", err);
+    console.error("getUserMedia / MediaRecorder error:", err);
     const statusText = document.getElementById("status-text");
     const statusSubtext = document.getElementById("status-subtext");
     if (statusText) statusText.innerText = "Microphone error.";
@@ -367,10 +382,7 @@ mediaRecorder.ondataavailable = (e) => {
 }
 
 function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+  if (mediaRecorder && mediaRecorder.state === "recording") {
     mediaRecorder.stop();
-  }
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "end" }));
   }
 }
