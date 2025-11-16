@@ -2,25 +2,30 @@
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-  <title>smallpie</title>
+  <title>smallpie – Quiet meeting recorder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Tailwind (built into /src/styles) -->
+  <link rel="stylesheet" href="/src/styles/base.css" />
+
+  <!-- Favicon / basic meta -->
+  <meta name="description" content="smallpie turns your meetings into clear, structured notes." />
 </head>
+<body class="min-h-screen bg-bgSoft dark:bg-darkBg text-textPrimary dark:text-darkText antialiased">
 
-<body class="bg-bg text-text dark:bg-darkBg dark:text-darkText font-sans min-h-screen flex flex-col">
-
-  <!-- HEADER -->
-  <header class="py-6 border-b border-bgSubtle dark:border-darkBgSoft bg-bg dark:bg-darkSurface transition-colors">
-    <div class="max-w-3xl mx-auto px-4 flex flex-col gap-4 md:gap-5">
-
-      <!-- Brand + tagline + privacy -->
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-
-        <!-- Logo + wordmark + tagline -->
-        <div class="flex items-center gap-3 md:gap-4">
-          <!-- LOGO -->
-          <div class="h-11 w-11 md:h-12 md:w-12 flex items-center justify-center flex-shrink-0">
-            <svg viewBox="0 0 100 100" class="h-11 w-11 md:h-12 md:w-12">
+  <div class="min-h-screen flex flex-col">
+    <!-- HEADER -->
+    <header class="w-full border-b border-bgSubtle dark:border-darkBgSoft bg-bgSoft/80 dark:bg-darkBg/80 backdrop-blur-sm">
+      <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <!-- Logo -->
+          <div class="flex items-center justify-center w-10 h-10 rounded-full bg-bgSubtle dark:bg-darkBgSoft">
+            <svg
+              width="32"
+              height="32"
+              viewBox="0 0 100 100"
+              xmlns="http://www.w3.org/2000/svg"
+            >
               <circle
                 cx="50" cy="50" r="32"
                 fill="none"
@@ -31,310 +36,280 @@
                 stroke-dashoffset="10"
               />
               <line
-                x1="32" y1="50" x2="68" y2="50"
+                x1="32"
+                y1="50"
+                x2="68"
+                y2="50"
                 stroke="#D1A32F"
                 stroke-width="8"
                 stroke-linecap="round"
               />
             </svg>
           </div>
-
-          <div class="flex flex-col gap-1">
-            <div class="text-2xl md:text-3xl font-semibold tracking-tight text-forest dark:text-darkText">
+          <div class="flex flex-col">
+            <span class="text-sm font-semibold tracking-tight text-forest dark:text-darkAccent">
               smallpie
+            </span>
+            <span class="text-xs text-textMuted dark:text-darkMuted">
+              Quietly listens. Gives you the summary.
+            </span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 text-xs text-textMuted dark:text-darkMuted">
+          <span class="hidden sm:inline">Processed securely. Never stored.</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1">
+      <div class="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
+
+        <!-- HERO -->
+        <section class="flex flex-col gap-3">
+          <h1 class="text-2xl sm:text-3xl font-semibold text-forest dark:text-darkAccent tracking-tight">
+            Turn your meetings into clear, structured notes.
+          </h1>
+          <p class="text-sm sm:text-base text-textMuted dark:text-darkMuted max-w-2xl">
+            smallpie records your meeting, transcribes it locally, and generates clean, actionable notes.
+            No dashboards, no clutter – just one button and a transcript you can trust.
+          </p>
+        </section>
+
+        <!-- CARDS ROW -->
+        <section class="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)] items-start">
+          <!-- LEFT: Recording card -->
+          <div class="rounded-3xl border border-bgSubtle dark:border-darkBgSoft bg-white dark:bg-darkSurface shadow-sm p-5 flex flex-col gap-4">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex flex-col gap-0.5">
+                <span class="text-xs font-medium uppercase tracking-[0.12em] text-textMuted dark:text-darkMuted">Live capture</span>
+                <span class="text-sm font-semibold text-forest dark:text-darkAccent">
+                  Record a new meeting
+                </span>
+              </div>
+              <div class="flex items-center gap-2 text-[11px] text-textMuted dark:text-darkMuted">
+                <span class="inline-flex items-center gap-1 rounded-full bg-bgSubtle dark:bg-darkBgSoft px-2 py-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Online
+                </span>
+              </div>
             </div>
-            <p class="text-sm md:text-base text-textMuted dark:text-darkMuted">
-              Turn your meetings into clear, structured notes.
+
+            <div class="flex flex-col items-center justify-center gap-3 py-4">
+              <button
+                id="start-recording"
+                class="w-16 h-16 rounded-full bg-rose-600 text-white flex items-center justify-center text-sm font-semibold shadow-sm hover:bg-rose-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-500"
+              >
+                REC
+              </button>
+              <div class="flex flex-col items-center gap-1">
+                <span id="record-label" class="text-sm font-medium text-forest dark:text-darkAccent">
+                  REC
+                </span>
+                <span id="record-helper" class="text-xs text-textMuted dark:text-darkMuted">
+                  Tap REC to start listening.
+                </span>
+              </div>
+              <div id="record-timer" class="text-xs font-mono text-textMuted dark:text-darkMuted hidden">
+                00:00
+              </div>
+              <div
+                id="record-error"
+                class="hidden text-xs text-rose-600 dark:text-rose-400 mt-1"
+              >
+                Something went wrong. Please try again.
+              </div>
+            </div>
+
+            <p class="text-[11px] text-textMuted dark:text-darkMuted">
+              smallpie only records while REC is active. Audio is processed securely on our side and not reused for training.
             </p>
           </div>
-        </div>
 
-        <!-- Privacy badge 
-        <div class="flex md:items-end">
-          <span
-            class="inline-flex items-center px-3.5 py-1.5 rounded-full
-                   bg-darkBgSoft/80 border border-darkBgSoft
-                   text-[11px] md:text-xs text-darkMuted
-                   whitespace-nowrap">
-            Processed securely. Never stored.
-          </span>
-        </div> -->
+          <!-- RIGHT: Upload card -->
+          <div class="rounded-3xl border border-bgSubtle dark:border-darkBgSoft bg-white dark:bg-darkSurface shadow-sm p-5 flex flex-col gap-4">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex flex-col gap-0.5">
+                <span class="text-xs font-medium uppercase tracking-[0.12em] text-textMuted dark:text-darkMuted">
+                  Existing audio
+                </span>
+                <span class="text-sm font-semibold text-forest dark:text-darkAccent">
+                  Upload a recording
+                </span>
+              </div>
+            </div>
 
-      </div>
+            <p class="text-xs text-textMuted dark:text-darkMuted">
+              Already recorded your meeting elsewhere? Upload the file and we’ll generate the same clear, structured notes.
+            </p>
 
-    </div> 
-  </header>
+            <button
+              id="use-file"
+              class="inline-flex items-center justify-center px-3 py-2 rounded-full border border-bgSubtle dark:border-darkBgSoft text-xs font-medium text-forest dark:text-darkAccent bg-bgSoft dark:bg-darkBg hover:bg-bgSubtle dark:hover:bg-darkBgSoft transition-colors"
+            >
+              Upload audio file
+            </button>
 
-  <!-- BACKDROP (dismisses flow) -->
-  <div id="backdrop"
-       class="hidden fixed inset-0 bg-backdropDim transition-opacity"></div>
-
-  <!-- MAIN CONTENT -->
-  <main class="
-    flex-1 max-w-3xl mx-auto w-full
-    px-4 py-8 space-y-10
-    md:py-10 md:space-y-12
-    lg:py-12 lg:space-y-14
-  ">
-
-    <!-- HERO / ONBOARDING -->
-    <section class="
-      bg-white dark:bg-darkSurface
-      border border-bgSubtle dark:border-darkBgSoft
-      rounded-3xl shadow-sm
-      p-6 md:p-7
-      space-y-4
-    ">
-      <h2 class="text-xl md:text-2xl font-semibold text-forest dark:text-darkAccent">
-        How smallpie works
-      </h2>
-      <p class="text-sm text-textMuted dark:text-darkMuted">
-        Record live audio or upload a file. We transcribe the conversation and generate clean, readable notes for you.
-      </p>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mt-2">
-        <div class="space-y-1">
-          <div class="text-xs font-semibold uppercase tracking-wide text-textMuted dark:text-darkMuted">
-            1. Capture
+            <p class="text-[11px] text-textMuted dark:text-darkMuted mt-1">
+              We support common formats like .webm, .m4a, .mp3, .wav and others.
+            </p>
           </div>
-          <p class="text-textMuted dark:text-darkMuted">
-            Record your meeting or upload an existing recording.
-          </p>
-        </div>
-        <div class="space-y-1">
-          <div class="text-xs font-semibold uppercase tracking-wide text-textMuted dark:text-darkMuted">
-            2. Understand
-          </div>
-          <p class="text-textMuted dark:text-darkMuted">
-            smallpie transcribes and analyses the audio in real time.
-          </p>
-        </div>
-        <div class="space-y-1">
-          <div class="text-xs font-semibold uppercase tracking-wide text-textMuted dark:text-darkMuted">
-            3. Deliver
-          </div>
-          <p class="text-textMuted dark:text-darkMuted">
-            You get structured notes and key points that are easy to share.
-          </p>
+        </section>
+
+        <!-- FLOW AREA (modal-ish) -->
+        <div id="backdrop" class="fixed inset-0 bg-black/30 dark:bg-black/50 hidden z-10"></div>
+        <div
+          id="flow-container"
+          class="fixed inset-x-0 bottom-0 z-20 flex justify-center pointer-events-none"
+        >
+          <!-- Dynamic content from templates will be mounted here -->
         </div>
       </div>
-    </section>
+    </main>
 
-    <!-- ACTION GRID -->
-    <section id="action-grid"
-      class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-      <!-- CARD: RECORD -->
-      <div class="
-        bg-white dark:bg-darkSurface
-        border border-bgSubtle dark:border-darkBgSoft
-        rounded-3xl shadow-md
-        p-6 md:p-8
-        flex flex-col items-center text-center
-      ">
-        <h2 class="text-lg md:text-xl font-medium text-forest dark:text-darkAccent mb-2">
-          Record live audio
-        </h2>
-        <p class="text-sm text-textMuted dark:text-darkMuted mb-5">
-          Use your microphone to capture the meeting in real time.
+    <!-- FOOTER -->
+    <footer class="border-t border-bgSubtle dark:border-darkBgSoft py-4 mt-4">
+      <div class="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <p class="text-[11px] text-textMuted dark:text-darkMuted">
+          smallpie runs with local transcription and a structured analysis layer.
         </p>
-
-        <!-- REC BUTTON -->
-        <button id="start-recording"
-          class="
-            h-28 w-28 md:h-32 md:w-32 
-            rounded-full flex items-center justify-center
-            bg-gold text-forestDark
-            border-4 border-forest
-            ring-4 ring-gold/30 ring-offset-2 ring-offset-bg dark:ring-offset-darkBg
-            hover:ring-gold/50 active:scale-95 transition-all
-          ">
-          <span id="record-label" class="text-base font-semibold">REC</span>
-        </button>
-
-        <p id="record-helper"
-           class="text-sm text-textMuted dark:text-darkMuted mt-4">
-          Tap REC to start listening.
-        </p>
-        <p id="record-timer"
-           class="text-xs text-textMuted dark:text-darkMuted mt-1 hidden">
-          00:00 • Recording…
-        </p>
-
-        <p id="record-error"
-           class="text-xs text-danger mt-2 hidden">
-          We couldn’t access your microphone. Check permissions and try again.
+        <p class="text-[11px] text-textMuted dark:text-darkMuted">
+          Your file will be processed securely. We don’t keep your audio longer than necessary.
         </p>
       </div>
-
-      <!-- CARD: UPLOAD -->
-      <div class="
-        bg-white dark:bg-darkSurface
-        border border-bgSubtle dark:border-darkBgSoft
-        rounded-3xl shadow-md
-        p-6 md:p-8
-        flex flex-col justify-between
-      ">
-        <div class="text-center md:text-left space-y-2">
-          <h2 class="text-lg md:text-xl font-medium text-forest dark:text-darkAccent">
-            Upload a recording
-          </h2>
-          <p class="text-sm text-textMuted dark:text-darkMuted">
-            Perfect if you already have a meeting recording on your device.
-          </p>
-        </div>
-
-        <div class="mt-6">
-          <button id="use-file"
-            class="
-              w-full py-4 rounded-xl 
-              bg-gold text-forestDark 
-              text-sm md:text-base font-medium shadow-sm hover:bg-goldSoft 
-              active:scale-[0.98] transition
-              dark:bg-darkSurface dark:text-darkAccent dark:hover:bg-darkBgSoft
-            ">
-            Choose or drop a file
-          </button>
-          <p class="text-xs text-textMuted dark:text-darkMuted mt-3 text-center md:text-left">
-            Supports WAV, MP3, M4A (up to ~2 hours).
-          </p>
-        </div>
-      </div>
-
-    </section>
-
-    <!-- FLOW CONTAINER (all dynamic UI goes here) -->
-    <section id="flow-container" class="relative w-full"></section>
-
-    <!-- FOOTER / PRIVACY STRIP -->
-    <footer class="pb-6 pt-2 text-center text-xs text-textMuted dark:text-darkMuted">
-      smallpie · v0.4 · Processed securely. Never stored.
     </footer>
+  </div>
 
-  </main>
-
-  <!-- TEMPLATES -->
-
-  <!-- BOTTOM SHEET: MEETING DETAILS -->
+  <!-- FORM TEMPLATE -->
   <template id="tmpl-form-section">
     <div
-      class="
-        fixed left-0 right-0 bottom-0
-        bg-white dark:bg-darkSurface
-        border-t border-bgSubtle dark:border-darkBgSoft
-        rounded-t-3xl shadow-2xl
-        p-6 space-y-6 max-w-3xl mx-auto
-      ">
-      <h3 class="text-lg font-semibold text-forest dark:text-darkAccent text-center">
-        Tell us about this meeting
-      </h3>
-      <p class="text-xs text-textMuted dark:text-darkMuted text-center">
-        This helps smallpie label your transcript and generate more useful notes.
-      </p>
+      class="pointer-events-auto max-w-md w-full mx-4 mb-6 rounded-3xl border border-bgSubtle dark:border-darkBgSoft bg-white dark:bg-darkSurface shadow-lg p-5"
+    >
+      <div class="flex flex-col gap-3">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-xs font-semibold text-forest dark:text-darkAccent">
+              Meeting details
+            </span>
+            <span class="text-[11px] text-textMuted dark:text-darkMuted">
+              We use this to keep your notes organized.
+            </span>
+          </div>
+        </div>
 
-      <div class="space-y-5">
-        <label class="block">
-          <span class="text-sm font-medium text-forest dark:text-darkAccent">Meeting name</span>
-          <input id="meeting-name" type="text" class="
-            block w-full mt-2 rounded-lg 
-            border border-bgSubtle dark:border-darkBgSoft
-            bg-white dark:bg-darkSurface 
-            text-text dark:text-darkText 
-            p-3 focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
-            focus:border-gold dark:focus:border-darkAccent
-            focus:outline-none
-          " placeholder="Weekly sync, 1:1, client call…" />
-        </label>
+        <form id="meeting-form" class="space-y-3">
+          <div class="flex flex-col gap-1">
+            <label for="meeting-name" class="text-xs font-medium text-textPrimary dark:text-darkText">
+              Meeting name
+            </label>
+            <input
+              id="meeting-name"
+              type="text"
+              class="w-full rounded-xl border border-bgSubtle dark:border-darkBgSoft bg-bgSoft dark:bg-darkBg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-gold"
+              placeholder="Weekly sync, 1:1, planning..."
+            />
+          </div>
 
-        <label class="block">
-          <span class="text-sm font-medium text-forest dark:text-darkAccent">Topic</span>
-          <input id="meeting-topic" type="text" class="
-            block w-full mt-2 rounded-lg 
-            border border-bgSubtle dark:border-darkBgSoft
-            bg-white dark:bg-darkSurface 
-            text-text dark:text-darkText 
-            p-3 focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
-            focus:border-gold dark:focus:border-darkAccent
-            focus:outline-none
-          " placeholder="Q4 planning, incident review, roadmap…" />
-        </label>
+          <div class="flex flex-col gap-1">
+            <label for="meeting-topic" class="text-xs font-medium text-textPrimary dark:text-darkText">
+              Topic
+            </label>
+            <input
+              id="meeting-topic"
+              type="text"
+              class="w-full rounded-xl border border-bgSubtle dark:border-darkBgSoft bg-bgSoft dark:bg-darkBg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-gold"
+              placeholder="What is this meeting about?"
+            />
+          </div>
 
-        <label class="block">
-          <span class="text-sm font-medium text-forest dark:text-darkAccent">Participants</span>
-          <input id="meeting-participants" type="number" class="
-            block w-full mt-2 rounded-lg 
-            border border-bgSubtle dark:border-darkBgSoft
-            bg-white dark:bg-darkSurface 
-            text-text dark:text-darkText 
-            p-3 focus:ring-2 focus:ring-gold dark:focus:ring-darkAccent
-            focus:border-gold dark:focus:border-darkAccent
-            focus:outline-none
-          " placeholder="Number of people in the meeting" />
-        </label>
+          <div class="flex flex-col gap-1">
+            <label for="meeting-participants" class="text-xs font-medium text-textPrimary dark:text-darkText">
+              Participants
+            </label>
+            <input
+              id="meeting-participants"
+              type="text"
+              class="w-full rounded-xl border border-bgSubtle dark:border-darkBgSoft bg-bgSoft dark:bg-darkBg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-gold"
+              placeholder="Names or roles (for context)"
+            />
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <button
+              type="button"
+              id="meeting-cancel"
+              class="text-[11px] text-textMuted dark:text-darkMuted hover:text-textPrimary dark:hover:text-darkText"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              class="inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-forest dark:bg-darkAccent text-white text-xs font-medium hover:bg-emerald-700 dark:hover:bg-darkAccent/90 transition-colors"
+            >
+              Start recording
+            </button>
+          </div>
+        </form>
       </div>
-
-      <button id="begin-flow"
-        class="
-          w-full py-4 rounded-xl 
-          bg-forest text-white 
-          text-lg font-medium shadow-sm hover:bg-forestDark 
-          active:scale-[0.98] transition
-          dark:bg-darkAccent dark:text-darkBg dark:hover:bg-gold
-        ">
-        Start recording
-      </button>
     </div>
   </template>
 
-  <!-- UPLOAD SECTION TEMPLATE (drag & drop + process) -->
+  <!-- FILE UPLOAD TEMPLATE -->
   <template id="tmpl-file-upload-section">
-    <div class="
-      bg-white dark:bg-darkSurface
-      border border-bgSubtle dark:border-darkBgSoft
-      rounded-3xl shadow-sm
-      p-6 space-y-6 mt-6
-    ">
+    <div
+      class="pointer-events-auto max-w-md w-full mx-4 mb-6 rounded-3xl border border-bgSubtle dark:border-darkBgSoft bg-white dark:bg-darkSurface shadow-lg p-5"
+    >
+      <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-xs font-semibold text-forest dark:text-darkAccent">
+            Upload audio file
+          </span>
+          <span class="text-[11px] text-textMuted dark:text-darkMuted">
+            We’ll transcribe and analyse it like a live meeting.
+          </span>
+        </div>
 
-      <div id="upload-dropzone"
-           class="
-             border-2 border-dashed border-bgSubtle dark:border-darkBgSoft
-             rounded-2xl p-6 text-center
-             bg-bgSubtle/40 dark:bg-darkBgSoft/40
-             cursor-pointer
-             transition
-           ">
-        <p class="text-sm font-medium text-forest dark:text-darkAccent">
-          Drop your file here
-        </p>
-        <p class="text-xs text-textMuted dark:text-darkMuted mt-1">
-          …or click to browse from your device.
-        </p>
+        <div
+          id="upload-dropzone"
+          class="mt-2 flex flex-col items-center justify-center gap-2 border border-dashed border-bgSubtle dark:border-darkBgSoft rounded-2xl px-4 py-6 text-center cursor-pointer bg-bgSoft/60 dark:bg-darkBg/60 hover:bg-bgSubtle/60 dark:hover:bg-darkBgSoft/60 transition-colors"
+        >
+          <span class="text-xs font-medium text-textPrimary dark:text-darkText">
+            Drop your file here
+          </span>
+          <span class="text-[11px] text-textMuted dark:text-darkMuted">
+            Or click to choose a file from your device.
+          </span>
+          <input
+            id="audio-file"
+            type="file"
+            accept="audio/*,video/*"
+            class="hidden"
+          />
+        </div>
+
+        <button
+          id="upload-file-btn"
+          class="mt-3 inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-forest dark:bg-darkAccent text-white text-xs font-medium hover:bg-emerald-700 dark:hover:bg-darkAccent/90 transition-colors"
+        >
+          Start processing
+        </button>
+
+        <button
+          type="button"
+          id="upload-cancel"
+          class="text-[11px] text-textMuted dark:text-darkMuted hover:text-textPrimary dark:hover:text-darkText self-start mt-1"
+        >
+          Cancel
+        </button>
       </div>
-
-      <input id="audio-file" type="file"
-        accept=".wav,.mp3,.m4a,.aac"
-        class="block w-full mt-3 text-xs text-textMuted dark:text-darkMuted" />
-
-      <button id="upload-file-btn"
-        class="
-          w-full py-3.5 rounded-xl 
-          bg-forest text-white 
-          text-sm md:text-base font-medium shadow-sm hover:bg-forestDark 
-          active:scale-[0.98] transition
-          dark:bg-darkAccent dark:text-darkBg dark:hover:bg-gold
-        ">
-        Start processing
-      </button>
-
-      <p class="text-xs text-textMuted dark:text-darkMuted">
-        Your file will be processed securely. We don’t keep your audio longer than necessary.
-      </p>
     </div>
   </template>
 
   <!-- STATUS TEMPLATE -->
   <template id="tmpl-status">
-    <div class="
+    <div id="status-card" style="opacity:1; transition: opacity 0.6s ease;" class="
       bg-white dark:bg-darkSurface
       border border-bgSubtle dark:border-darkBgSoft
       rounded-3xl shadow-sm
