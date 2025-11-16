@@ -323,19 +323,23 @@ async function startRecordingAndStreaming(metadata) {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-    mediaRecorder = new MediaRecorder(stream, {
-      mimeType: "audio/ogg;codecs=opus"
-    });
+mediaRecorder = new MediaRecorder(stream, {
+  mimeType: "audio/webm;codecs=opus"
+});
 
-    mediaRecorder.onstart = () => {
-      // already handled via ws.onopen; keep here for safety
-    };
+mediaRecorder.start();  
 
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0 && ws?.readyState === WebSocket.OPEN) {
-        e.data.arrayBuffer().then((buf) => ws.send(buf));
-      }
-    };
+setInterval(() => {
+  if (mediaRecorder.state === "recording") {
+    mediaRecorder.requestData(); 
+  }
+}, 300);
+
+mediaRecorder.ondataavailable = (e) => {
+  e.data.arrayBuffer().then(buf => {
+    ws.send(buf);
+  });
+};
 
     mediaRecorder.onstop = () => {
       if (ws?.readyState === WebSocket.OPEN) {
