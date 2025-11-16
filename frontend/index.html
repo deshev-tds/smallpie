@@ -2,7 +2,7 @@
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
-  <title>smallpie - a quiet meeting recorder</title>
+  <title>smallpie – Quiet meeting recorder</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Tailwind (built into /src/styles) -->
@@ -51,7 +51,7 @@
               smallpie
             </span>
             <span class="text-xs text-textMuted dark:text-darkMuted">
-              Listens quetly. Gives summary.
+              Quietly listens. Gives you the summary.
             </span>
           </div>
         </div>
@@ -69,11 +69,11 @@
         <!-- HERO -->
         <section class="flex flex-col gap-3">
           <h1 class="text-2xl sm:text-3xl font-semibold text-forest dark:text-darkAccent tracking-tight">
-            Turn your meetings into clear, structured notes and insights.
+            Turn your meetings into clear, structured notes.
           </h1>
           <p class="text-sm sm:text-base text-textMuted dark:text-darkMuted max-w-2xl">
-            smallpie records your meeting, analyzes it, and sends you clean, actionable notes and insights.
-            No dashboards, no clutter, no "subscribe to our newsletter". Just one button and insights you can trust, delivered on your mail in minutes.
+            smallpie records your meeting, transcribes it locally, and generates clean, actionable notes.
+            No dashboards, no clutter – just one button and a transcript you can trust.
           </p>
         </section>
 
@@ -123,7 +123,7 @@
             </div>
 
             <p class="text-[11px] text-textMuted dark:text-darkMuted">
-              smallpie only records while REC is active. Audio is processed securely on our side and not reused for training or advertising.
+              smallpie only records while REC is active. Audio is processed securely on our side and not reused for training.
             </p>
           </div>
 
@@ -235,22 +235,6 @@
             />
           </div>
 
-          <!-- Email address for sending notes -->
-          <div class="flex flex-col gap-1">
-            <label for="meeting-email" class="text-xs font-medium text-textPrimary dark:text-darkText">
-              Email address
-            </label>
-            <input
-              id="meeting-email"
-              type="email"
-              class="w-full rounded-xl border border-bgSubtle dark:border-darkBgSoft bg-bgSoft dark:bg-darkBg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-gold"
-              placeholder="Where should we send your notes?"
-            />
-            <p class="text-[11px] text-textMuted dark:text-darkMuted">
-              We’ll email you the summary and transcript. No newsletters, no spam.
-            </p>
-          </div>
-
           <div class="flex items-center justify-between pt-1">
             <button
               type="button"
@@ -339,30 +323,30 @@
         </div>
         <p id="status-subtext"
            class="text-xs text-textMuted dark:text-darkMuted">
-          We’re analysing your audio and generating your notes. Check your inbox in a few minutes!
+          We’re analysing your audio and generating your notes.
         </p>
       </div>
     </div>
   </template>
 
   <script type="module" src="src/main.js"></script>
-  <!-- Status bubble (appears then fades out) -->
-  <div id="status-bubble"
-       style="
-         position: fixed;
-         bottom: 32px;
-         left: 50%;
-         transform: translateX(-50%);
-         background: #1b1b1b;
-         padding: 14px 18px;
-         border-radius: 12px;
-         border: 1px solid #2a2a2a;
-         font-size: 14px;
-         opacity: 0;
-         transition: opacity 0.5s ease;
-         pointer-events: none;
-         z-index: 9999;
-       ">
-  </div>
+<!-- Status bubble (appears then fades out) -->
+<div id="status-bubble"
+     style="
+       position: fixed;
+       bottom: 32px;
+       left: 50%;
+       transform: translateX(-50%);
+       background: #1b1b1b;
+       padding: 14px 18px;
+       border-radius: 12px;
+       border: 1px solid #2a2a2a;
+       font-size: 14px;
+       opacity: 0;
+       transition: opacity 0.5s ease;
+       pointer-events: none;
+       z-index: 9999;
+     ">
+</div>
 </body>
 </html>
