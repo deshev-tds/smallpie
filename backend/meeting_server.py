@@ -522,11 +522,19 @@ async def websocket_record(websocket: WebSocket):
                         except Exception as e:
                             print("[ws] metadata parse error:", e)
 
-                    # Stop markers
-                    upper = text.upper()
-                    if upper in ("STOP", "END"):
-                        print(f"[ws] received stop marker: {upper}")
-                        break
+                    # Stop markers (string or JSON)
+                        try:
+                            parsed = json.loads(text)
+                            if isinstance(parsed, dict) and parsed.get("type", "").lower() == "end":
+                                print("[ws] received stop marker (json)")
+                                break
+                        except:
+                            pass
+                        
+                        upper = text.upper()
+                        if upper in ("STOP", "END"):
+                            print(f"[ws] received stop marker: {upper}")
+                            break
 
                     # Any other text is ignored
                     print("[ws] ignoring text message:", repr(text))
