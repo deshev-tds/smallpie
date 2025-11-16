@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from threading import Thread
 
-from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect, Header, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
@@ -42,6 +42,56 @@ TRAITS_FILE = BASE_DIR / "damyan_traits.txt"
 # OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# ============================================================
+# SIMPLE BEARER TOKEN AUTH
+# ============================================================
+
+ACCESS_TOKEN = os.getenv("SMALLPIE_ACCESS_TOKEN")
+AUTH_ENABLED = ACCESS_TOKEN is not None and ACCESS_TOKEN != ""
+
+if not AUTH_ENABLED:
+    print("[auth] WARNING: SMALLPIE_ACCESS_TOKEN not set. Authentication is DISABLED.")
+else:
+    print("[auth] Authentication ENABLED using SMALLPIE_ACCESS_TOKEN.")
+
+
+def verify_bearer_token(authorization_header: str | None) -> None:
+    """
+    Verify the Authorization: Bearer <token> header for HTTP endpoints.
+    If AUTH_ENABLED is False, this is a no-op.
+    """
+    if not AUTH_ENABLED:
+        return
+
+    if not authorization_header:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+
+    parts = authorization_header.split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Invalid Authorization header format")
+
+    token = parts[1].strip()
+    if token != ACCESS_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid access token")
+
+
+def verify_ws_token(token: str | None) -> bool:
+    """
+    Verify the ?token=... query parameter for WebSocket connections.
+    Returns True if accepted, False if rejected.
+    """
+    if not AUTH_ENABLED:
+        return True
+
+    if not token:
+        print("[auth] WebSocket missing token")
+        return False
+
+    if token != ACCESS_TOKEN:
+        print("[auth] WebSocket invalid token")
+        return False
+
+    return True
 
 
 def rand_delay(label: str = ""):
@@ -371,7 +421,10 @@ async def upload_meeting_file(
     meeting_topic: str = Form(...),
     participants: str = Form(...),
     file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
 ):
+    # HTTP Bearer auth (only enforced if SMALLPIE_ACCESS_TOKEN is set)
+    verify_bearer_token(authorization)
 
     meeting_id = uuid.uuid4().hex
     original_suffix = Path(file.filename or "upload").suffix or ".bin"
@@ -433,10 +486,17 @@ async def websocket_record(websocket: WebSocket):
     - When receiving END/STOP or disconnect, starts full_meeting_pipeline
       in a background thread.
     """
+    # Auth via ?token=... in query params (only enforced if SMALLPIE_ACCESS_TOKEN is set)
+    qp = websocket.query_params
+    ws_token = qp.get("token")
+    if not verify_ws_token(ws_token):
+        # Close with policy violation
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
 
     # Defaults
-    qp = websocket.query_params
     meeting_name = qp.get("meeting_name", "Untitled meeting")
     meeting_topic = qp.get("meeting_topic", "Not specified")
     participants = qp.get("participants", "Not specified")

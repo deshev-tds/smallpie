@@ -1,5 +1,10 @@
 import "/src/styles/base.css";
 
+// API CONFIG
+// IMPORTANT: set API_TOKEN to the same value as SMALLPIE_ACCESS_TOKEN on the backend.
+const API_WS_URL = "wss://api.smallpie.fun/ws";
+const API_TOKEN = "Iuhfjkdskeqrrgyubhoijkbcvt7gyiuhkjbwr";
+
 // STATIC ELEMENTS
 const recButton = document.getElementById("start-recording");
 const recordLabel = document.getElementById("record-label");
@@ -233,7 +238,7 @@ function wireDynamicHandlers() {
       if (statusText) statusText.innerText = "Uploading file…";
       if (statusSubtext) statusSubtext.innerText = "We’re analysing your audio and generating notes.";
 
-      // TODO: hook real upload logic here
+      // TODO: hook real upload logic here (with Authorization: Bearer API_TOKEN)
       // For now just simulate:
       setTimeout(() => {
         if (statusText) statusText.innerText = "Processing finished.";
@@ -273,7 +278,9 @@ async function startRecordingAndStreaming(metadata) {
   setRecordingState("idle");
   droppedFile = null; // irrelevant here
 
-  ws = new WebSocket("wss://api.smallpie.fun/ws");
+  // Attach token as query param
+  const wsUrl = `${API_WS_URL}?token=${encodeURIComponent(API_TOKEN)}`;
+  ws = new WebSocket(wsUrl);
   ws.binaryType = "arraybuffer";
 
   ws.onopen = () => {
