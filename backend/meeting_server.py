@@ -568,7 +568,7 @@ def full_meeting_pipeline(
 
 
 # ============================================================
-# LIVE TRANSCRIPTION ADDITIONS (V11 - RE-MUXING)
+# LIVE TRANSCRIPTION ADDITIONS (V12 - RE-MUXING + TypeError FIX)
 # ============================================================
 
 class ThreadSafeTranscript:
@@ -687,6 +687,34 @@ def build_and_extract_wav_chunk(
             pass
 
 
+# === FIX: New thread target wrapper function ===
+def extraction_and_transcription_thread(
+    part_files: list[Path],
+    start_sec: float,
+    duration_sec: float | None,
+    chunk_index: int,
+    transcript_store: ThreadSafeTranscript
+):
+    """
+    This is the new target for the orchestrator's threads.
+    It runs the heavy I/O (build/extract) and then the
+    CPU-bound (transcribe) work in the background.
+    """
+    try:
+        # 1. Build and extract the WAV chunk
+        wav_chunk = build_and_extract_wav_chunk(part_files, start_sec, duration_sec, chunk_index)
+        
+        # 2. If successful, pass it to the transcription function
+        if wav_chunk:
+            process_wav_chunk_thread(wav_chunk, chunk_index, transcript_store)
+        else:
+            print(f"[orchestrator] skipping transcription for chunk {chunk_index}, extraction failed.")
+    except Exception as e:
+        print(f"[orchestrator] FATAL unhandled error in worker thread for chunk {chunk_index}: {e}", file=sys.stderr)
+        transcript_store.add(chunk_index, f"[[ERROR: Worker thread failed for chunk {chunk_index}]]")
+# ============================================
+
+
 def live_transcription_orchestrator(
     data_queue: queue.Queue, # Receives binary blobs from WS
     recording_stopped: threading.Event,
@@ -698,10 +726,10 @@ def live_transcription_orchestrator(
     user_email: str | None
 ):
     """
-    (V11) The main background thread for a live session.
+    (V12) The main background thread for a live session.
     - Pulls data blobs from a queue and saves them to a *persistent list*.
     - Every CHUNK_SECONDS, re-builds the *entire* stream and
-      spawns an ffmpeg process to extract the *newest* chunk.
+      spawns a thread to extract the *newest* chunk and transcribe it.
     """
     chunk_index = 0
     processing_threads: list[threading.Thread] = []
@@ -735,13 +763,19 @@ def live_transcription_orchestrator(
                     # We are processing the chunk from [index*60s] to [(index+1)*60s]
                     start_sec = chunk_index * CHUNK_SECONDS
                     
-                    # Spawn a thread to do the heavy ffmpeg work
-                    # We pass a *copy* of the list of parts
+                    # === FIX: Spawn the new wrapper function ===
                     t = threading.Thread(
-                        target=build_and_extract_wav_chunk,
-                        args=(list(all_part_files), start_sec, CHUNK_SECONDS, chunk_index, transcript_store),
+                        target=extraction_and_transcription_thread,
+                        args=(
+                            list(all_part_files), # Pass a *copy* of the list
+                            start_sec,
+                            CHUNK_SECONDS,
+                            chunk_index,
+                            transcript_store
+                        ),
                         daemon=True
                     )
+                    # =========================================
                     t.start()
                     processing_threads.append(t)
                 else:
@@ -759,13 +793,19 @@ def live_transcription_orchestrator(
         if all_part_files:
             start_sec = chunk_index * CHUNK_SECONDS
             
-            # For the final chunk, we don't set a duration,
-            # ffmpeg just reads to the end.
+            # === FIX: Spawn the new wrapper function for the final chunk ===
             t = threading.Thread(
-                target=build_and_extract_wav_chunk,
-                args=(list(all_part_files), start_sec, None, chunk_index, transcript_store),
+                target=extraction_and_transcription_thread,
+                args=(
+                    list(all_part_files), # Pass a *copy* of the list
+                    start_sec,
+                    None, # duration_sec = None (to end of file)
+                    chunk_index,
+                    transcript_store
+                ),
                 daemon=True
             )
+            # =========================================================
             t.start()
             processing_threads.append(t)
         else:
