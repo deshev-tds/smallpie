@@ -697,52 +697,52 @@ def live_transcription_orchestrator(
     chunk_start_time = time.time()
     
     try:
+        # === FIX 5: Corrected loop logic ===
         while True:
             try:
                 # Poll the queue with a timeout.
-                # This lets us check the CHUNK_SECONDS timer
-                # and the recording_stopped event regularly.
                 blob = data_queue.get(timeout=0.5)
+                # If we got data, save it
+                part_path = AUDIO_DIR / f"{meeting_id}_part_{part_index:04d}.webm"
+                part_path.write_bytes(blob)
+                current_part_files.append(part_path)
+                part_index += 1
             except queue.Empty:
-                # Queue is empty, check our timers
-                now = time.time()
-                is_stopped = recording_stopped.is_set()
-                
-                if (now - chunk_start_time > CHUNK_SECONDS) and not is_stopped:
-                    # Time to cut a chunk
-                    print(f"[orchestrator] {CHUNK_SECONDS}s passed, cutting chunk {chunk_index}")
-                    
-                    if current_part_files:
-                        chunk_path = AUDIO_DIR / f"{meeting_id}_chunk_{chunk_index}.webm"
-                        if concatenate_part_files(current_part_files, chunk_path):
-                            t = threading.Thread(
-                                target=process_concatenated_chunk_thread,
-                                args=(chunk_path, chunk_index, transcript_store),
-                                daemon=True
-                            )
-                            t.start()
-                            processing_threads.append(t)
-                        else:
-                            print(f"[orchestrator] failed to concat chunk {chunk_index}, skipping")
+                # Queue was empty, just pass and go to timer check
+                pass
 
-                    # Reset for next chunk
-                    current_part_files = []
-                    chunk_index += 1
-                    chunk_start_time = now
+            # This timer check now runs EVERY loop,
+            # regardless of whether the queue was empty.
+            now = time.time()
+            is_stopped = recording_stopped.is_set()
+            
+            if (now - chunk_start_time > CHUNK_SECONDS) and not is_stopped:
+                # Time to cut a chunk
+                print(f"[orchestrator] {CHUNK_SECONDS}s passed, cutting chunk {chunk_index}")
                 
-                elif is_stopped:
-                    print("[orchestrator] recording stopped, breaking main loop")
-                    break
-                
-                # If neither, just loop and poll queue again
-                continue
+                if current_part_files:
+                    chunk_path = AUDIO_DIR / f"{meeting_id}_chunk_{chunk_index}.webm"
+                    if concatenate_part_files(current_part_files, chunk_path):
+                        t = threading.Thread(
+                            target=process_concatenated_chunk_thread,
+                            args=(chunk_path, chunk_index, transcript_store),
+                            daemon=True
+                        )
+                        t.start()
+                        processing_threads.append(t)
+                    else:
+                        print(f"[orchestrator] failed to concat chunk {chunk_index}, skipping")
 
-            # If we're here, we got data from the queue
-            part_path = AUDIO_DIR / f"{meeting_id}_part_{part_index:04d}.webm"
-            part_path.write_bytes(blob)
-            current_part_files.append(part_path)
-            part_index += 1
-
+                # Reset for next chunk
+                current_part_files = []
+                chunk_index += 1
+                chunk_start_time = now
+            
+            elif is_stopped:
+                print("[orchestrator] recording stopped, breaking main loop")
+                break
+        # ===================================
+        
         # --- Recording has stopped, process the final segment ---
         print("[orchestrator] processing final audio segment...")
         if current_part_files:
