@@ -53,7 +53,7 @@ function showScreen(template, options = {}) {
     if (showBackdropFlag) {
       showBackdrop();
     } else {
-      // NEW: статус картата да не идва с backdrop, не замъгляваме страницата
+      // status / upload без backdrop
       backdrop.classList.add("hidden");
     }
 
@@ -94,6 +94,7 @@ function setRecordingState(state) {
     case "idle":
       recButton.classList.remove("animate-pulse", "opacity-70", "cursor-not-allowed");
       recButton.disabled = false;
+      recButton.textContent = "REC";
       recordLabel.textContent = "REC";
       recordHelper.textContent = "Tap REC to start listening.";
       recordTimerEl.classList.add("hidden");
@@ -102,6 +103,8 @@ function setRecordingState(state) {
 
     case "recording":
       recButton.classList.add("animate-pulse");
+      recButton.textContent = "STOP";
+      recButton.classList.remove("opacity-70", "cursor-not-allowed");
       recButton.disabled = false;
       recordLabel.textContent = "STOP";
       recordHelper.textContent = "Recording… tap STOP when you’re done.";
@@ -113,21 +116,23 @@ function setRecordingState(state) {
       recButton.classList.remove("animate-pulse");
       recButton.classList.add("opacity-70", "cursor-not-allowed");
       recButton.disabled = true;
-      recordLabel.textContent = "Finishing…";
       recordHelper.textContent = "Sending the last audio chunks to smallpie.";
       break;
 
     case "finished":
       recButton.classList.remove("animate-pulse", "opacity-70", "cursor-not-allowed");
       recButton.disabled = false;
+      recButton.textContent = "REC";
       recordLabel.textContent = "REC";
       recordHelper.textContent = "Recording finished. Tap REC to start a new one.";
+      recordTimerEl.classList.add("hidden");
       stopRecordingTimer();
       break;
 
     case "error":
-      recButton.classList.remove("animate-pulse");
+      recButton.classList.remove("animate-pulse", "opacity-70", "cursor-not-allowed");
       recButton.disabled = false;
+      recButton.textContent = "REC";
       recordLabel.textContent = "REC";
       recordHelper.textContent = "Something went wrong. You can try again.";
       recordErrorEl.classList.remove("hidden");
@@ -163,7 +168,7 @@ function startRecordingTimer() {
     const totalSeconds = Math.floor(elapsedMs / 1000);
     const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
     const seconds = String(totalSeconds % 60).padStart(2, "0");
-    recordTimerEl.textContent = `${minutes}:${seconds}`;
+    recordTimerEl.textContent = `${minutes}:${seconds} • Recording…`;
   }, 1000);
 }
 
