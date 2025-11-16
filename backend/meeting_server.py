@@ -505,7 +505,7 @@ def full_meeting_pipeline(
 
     print(f"[pipeline] starting full pipeline for meeting_id={meeting_id}")
 
-    transcript = transcribe_with_whisper_local(audio_file)
+    transcript = transcribe_with_whisper_local(audio_path)
     analysis = analyze_with_gpt(meeting_name, meeting_topic, participants, transcript)
     folder = save_meeting_outputs(meeting_id, meeting_name, transcript, analysis)
     update_traits(transcript, analysis)
@@ -990,6 +990,14 @@ async def websocket_record(websocket: WebSocket):
         # --- Finalize and Hand-off ---
         # By exiting the 'with' block, the file `f` is closed and flushed.
         print(f"[ws] stored streamed audio at {raw_path}")
+        
+        # === FIX 4: Wait for OS to flush file "footer" to disk ===
+        # This is the fix for the "N/A" race condition.
+        # We must wait *after* closing the file handle but *before*
+        # signaling the orchestrator that the file is ready.
+        print("[ws] waiting 2s for OS to finalize file...")
+        time.sleep(2.0)
+        # ==========================================================
         
         # Now we signal the orchestrator that the recording is finished
         # and the file is ready for final processing.
