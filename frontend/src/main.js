@@ -36,10 +36,14 @@ let droppedFile = null;
 // ------------------------------------------------
 
 function clearFlow() {
-  flowContainer.innerHTML = "";
+  while (flowContainer.firstChild) {
+    flowContainer.removeChild(flowContainer.firstChild);
+  }
 }
 
-function showScreen(template, { showBackdropFlag = true } = {}) {
+function showScreen(template, options = {}) {
+  const { showBackdropFlag = true } = options;
+
   clearFlow();
 
   if (template) {
@@ -91,7 +95,6 @@ function setRecordingState(state) {
 
     case "recording":
       recButton.classList.add("animate-pulse");
-      recButton.classList.remove("opacity-70", "cursor-not-allowed");
       recButton.disabled = false;
       recordLabel.textContent = "STOP";
       recordHelper.textContent = "Recording… tap STOP when you’re done.";
@@ -112,12 +115,11 @@ function setRecordingState(state) {
       recButton.disabled = false;
       recordLabel.textContent = "REC";
       recordHelper.textContent = "Recording finished. Tap REC to start a new one.";
-      recordTimerEl.classList.add("hidden");
       stopRecordingTimer();
       break;
 
     case "error":
-      recButton.classList.remove("animate-pulse", "opacity-70", "cursor-not-allowed");
+      recButton.classList.remove("animate-pulse");
       recButton.disabled = false;
       recordLabel.textContent = "REC";
       recordHelper.textContent = "Something went wrong. You can try again.";
@@ -125,6 +127,25 @@ function setRecordingState(state) {
       stopRecordingTimer();
       break;
   }
+}
+
+function fadeOutStatusCardAndFinish() {
+  const card = document.getElementById("status-card");
+  if (!card) {
+    // Fallback: just reset UI state
+    setRecordingState("finished");
+    return;
+  }
+
+  // Keep REC disabled while status is visible.
+  // Wait 3 seconds, then fade out, then fully reset UI.
+  setTimeout(() => {
+    card.style.opacity = "0";
+    setTimeout(() => {
+      card.remove();
+      setRecordingState("finished");
+    }, 600); // match CSS transition duration
+  }, 3000);
 }
 
 function startRecordingTimer() {
@@ -136,7 +157,7 @@ function startRecordingTimer() {
     const totalSeconds = Math.floor(elapsedMs / 1000);
     const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
     const seconds = String(totalSeconds % 60).padStart(2, "0");
-    recordTimerEl.textContent = `${minutes}:${seconds} • Recording…`;
+    recordTimerEl.textContent = `${minutes}:${seconds}`;
   }, 1000);
 }
 
@@ -148,14 +169,25 @@ function stopRecordingTimer() {
 }
 
 // ------------------------------------------------
-// DYNAMIC HANDLERS (inside templates)
+// DYNAMIC HANDLERS (FORM / UPLOAD / STATUS)
 // ------------------------------------------------
 
 function wireDynamicHandlers() {
-  // Form bottom sheet
-  const btnBegin = document.getElementById("begin-flow");
-  if (btnBegin) {
-    btnBegin.onclick = async () => {
+  // Form
+  const form = document.getElementById("meeting-form");
+  const cancelBtn = document.getElementById("meeting-cancel");
+
+  if (cancelBtn) {
+    cancelBtn.onclick = () => {
+      hideBackdrop();
+      currentMode = "idle";
+      setRecordingState("idle");
+    };
+  }
+
+  if (form) {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
       const name = document.getElementById("meeting-name").value.trim();
       const topic = document.getElementById("meeting-topic").value.trim();
       const participants = document.getElementById("meeting-participants").value.trim();
@@ -171,14 +203,14 @@ function wireDynamicHandlers() {
       const statusSubtext = document.getElementById("status-subtext");
 
       if (statusText) statusText.innerText = "Connecting to audio service…";
-      if (statusSubtext) statusSubtext.innerText = "We’re preparing to record your meeting in real time.";
+      if (statusSubtext)
+        statusSubtext.innerText = "We’re preparing to record your meeting in real time.";
 
       try {
         await startRecordingAndStreaming({ name, topic, participants });
       } catch (err) {
         console.error(err);
         if (statusText) statusText.innerText = "Error starting recording.";
-        if (statusSubtext) statusSubtext.innerText = "Please try again.";
         setRecordingState("error");
       }
     };
@@ -188,15 +220,24 @@ function wireDynamicHandlers() {
   const uploadBtn = document.getElementById("upload-file-btn");
   const audioInput = document.getElementById("audio-file");
   const dropzone = document.getElementById("upload-dropzone");
+  const uploadCancelBtn = document.getElementById("upload-cancel");
+
+  if (uploadCancelBtn) {
+    uploadCancelBtn.onclick = () => {
+      hideBackdrop();
+      currentMode = "idle";
+    };
+  }
 
   if (dropzone) {
-    // Drag & drop visual cues
-    ["dragenter", "dragover"].forEach((ev) => {
-      dropzone.addEventListener(ev, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropzone.classList.add("ring-2", "ring-gold", "bg-bgSubtle", "dark:bg-darkBgSoft");
-      });
+    dropzone.addEventListener("click", () => {
+      audioInput?.click();
+    });
+
+    dropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.add("ring-2", "ring-gold", "bg-bgSubtle", "dark:bg-darkBgSoft");
     });
 
     ["dragleave", "drop"].forEach((ev) => {
@@ -211,18 +252,19 @@ function wireDynamicHandlers() {
       const files = e.dataTransfer?.files;
       if (files && files.length > 0) {
         droppedFile = files[0];
+        if (audioInput) {
+          audioInput.files = files;
+        }
       }
-    });
-
-    dropzone.addEventListener("click", () => {
-      if (audioInput) audioInput.click();
     });
   }
 
   if (audioInput) {
-    audioInput.onchange = () => {
-      const file = audioInput.files?.[0];
-      if (file) droppedFile = file;
+    audioInput.onchange = (e) => {
+      const files = e.target.files;
+      if (files && files.length > 0) {
+        droppedFile = files[0];
+      }
     };
   }
 
@@ -263,6 +305,15 @@ recButton.onclick = () => {
   } else if (recordingState === "recording") {
     // User tapped STOP
     setRecordingState("finishing");
+
+    const statusText = document.getElementById("status-text");
+    const statusSubtext = document.getElementById("status-subtext");
+    if (statusText) statusText.innerText = "Audio received. Processing…";
+    if (statusSubtext)
+      statusSubtext.innerText =
+        "You can stay on this page. Your notes are being generated in the background.";
+
+    fadeOutStatusCardAndFinish();
     stopRecording();
   }
 };
@@ -274,11 +325,17 @@ btnUseFile.onclick = () => {
 };
 
 // ------------------------------------------------
-// RECORDING + WEBSOCKET STREAMING
+// RECORDING + WEBSOCKET LOGIC
 // ------------------------------------------------
 
 async function startRecordingAndStreaming(metadata) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("getUserMedia not supported in this browser.");
+  }
+
+  // Reset state
   setRecordingState("idle");
+  recordErrorEl.classList.add("hidden");
   droppedFile = null; // irrelevant here
 
   // Attach token as query param
@@ -308,52 +365,50 @@ async function startRecordingAndStreaming(metadata) {
     setRecordingState("error");
   };
 
-  // In current backend, no messages are sent back,
-  // but keep handler for future use.
   ws.onmessage = (msg) => {
-    try {
-      const data = JSON.parse(msg.data);
+    const data = JSON.parse(msg.data);
 
-      if (data.type === "final_transcript") {
-        const statusText = document.getElementById("status-text");
-        const statusSubtext = document.getElementById("status-subtext");
-        if (statusText) statusText.innerText = "All done.";
-        if (statusSubtext) statusSubtext.innerText = "Your transcript and notes have been generated.";
-        setRecordingState("finished");
-      }
+    if (data.type === "final_transcript") {
+      const statusText = document.getElementById("status-text");
+      const statusSubtext = document.getElementById("status-subtext");
+      if (statusText) statusText.innerText = "Processing finished.";
+      if (statusSubtext) statusSubtext.innerText = "Your transcript and notes are ready.";
+      fadeOutStatusCardAndFinish();
+      stopRecording();
+    }
 
-      if (data.type === "error") {
-        const statusText = document.getElementById("status-text");
-        const statusSubtext = document.getElementById("status-subtext");
-        if (statusText) statusText.innerText = "Server error.";
-        if (statusSubtext) statusSubtext.innerText = data.message || "Something went wrong on our side.";
-        setRecordingState("error");
-      }
-    } catch (e) {
-      console.warn("Non-JSON message from WS:", msg.data);
+    if (data.type === "error") {
+      const statusText = document.getElementById("status-text");
+      const statusSubtext = document.getElementById("status-subtext");
+      if (statusText) statusText.innerText = "Server error.";
+      if (statusSubtext)
+        statusSubtext.innerText = data.message || "Something went wrong on our side.";
+      setRecordingState("error");
     }
   };
 
   ws.onclose = () => {
-    if (recordingState === "finishing") {
-      // No more data, consider session closed from UI side
-      const statusText = document.getElementById("status-text");
-      const statusSubtext = document.getElementById("status-subtext");
-      if (statusText) statusText.innerText = "Audio sent for processing.";
-      if (statusSubtext) statusSubtext.innerText = "You can close this tab. Your notes will be generated in the background.";
-      setRecordingState("finished");
+    console.log("WS closed");
+    if (recordingState === "recording" || recordingState === "finishing") {
+      // If closed unexpectedly during recording, show error
+      if (recordingState !== "finishing") {
+        const statusText = document.getElementById("status-text");
+        const statusSubtext = document.getElementById("status-subtext");
+        if (statusText) statusText.innerText = "Connection closed.";
+        if (statusSubtext) statusSubtext.innerText = "The connection ended unexpectedly.";
+        setRecordingState("error");
+      }
     }
   };
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
     mediaRecorder = new MediaRecorder(stream, {
       mimeType: "audio/webm;codecs=opus",
     });
 
     mediaRecorder.ondataavailable = (e) => {
-      if (ws && ws.readyState === WebSocket.OPEN && e.data && e.data.size > 0) {
+      if (ws?.readyState === WebSocket.OPEN && e.data.size > 0) {
         e.data.arrayBuffer().then((buf) => {
           ws.send(buf);
         });
@@ -361,28 +416,29 @@ async function startRecordingAndStreaming(metadata) {
     };
 
     mediaRecorder.onstop = () => {
-      // When recording stops, tell backend we're done and close WS
-      if (ws && ws.readyState === WebSocket.OPEN) {
+      if (ws?.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "end" }));
-        ws.close();
       }
     };
 
-    // Single start: use timeslice 300ms to emit data regularly
     mediaRecorder.start(300);
   } catch (err) {
-    console.error("getUserMedia / MediaRecorder error:", err);
+    console.error("getUserMedia error:", err);
     const statusText = document.getElementById("status-text");
     const statusSubtext = document.getElementById("status-subtext");
     if (statusText) statusText.innerText = "Microphone error.";
-    if (statusSubtext) statusSubtext.innerText = "We can’t access your microphone. Check permissions and try again.";
+    if (statusSubtext)
+      statusSubtext.innerText = "We can’t access your microphone. Check permissions and try again.";
     recordErrorEl.classList.remove("hidden");
     setRecordingState("error");
   }
 }
 
 function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state === "recording") {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop();
+  }
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "end" }));
   }
 }
