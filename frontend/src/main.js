@@ -441,7 +441,10 @@ async function startRecordingAndStreaming(metadata) {
       }
     };
 
-    mediaRecorder.start(300);
+    // === THE FIX ===
+    // 300ms is too small and sends fragments.
+    // 5000ms (5s) ensures each blob is a valid, self-contained file.
+    mediaRecorder.start(5000); 
   } catch (err) {
     console.error("getUserMedia error:", err);
     const statusText = document.getElementById("status-text");
