@@ -13,6 +13,55 @@ The system currently has two main components:
 
 The backend with WebSockets arrives in version 0.7.
 
+
+## Нож 16, 2025: v0.6.0 - Streaming Transcription Architecture
+
+### Added
+- Introduced a new **live transcription orchestrator**, enabling
+  near-real-time processing of audio during the recording session.
+- Implemented **parallel chunk-based transcription**:
+  audio is segmented into fixed-duration slices (5s chinks from frontend, concatenated into 60s on backend) 
+  while streaming. Each slice is immediately handed off to whisper.cpp in a background thread for 
+  parallel processing while recording is still running on the frontend. 
+- Added a thread-safe transcript aggregator to merge partial transcriptions
+  into the final meeting transcript.
+- Integrated final-segment duration detection to prevent empty or corrupt
+  last-chunk artifacts (`ffprobe: duration 'N/A'` errors avoided).
+
+### Improved
+- WebSocket recording endpoint now flushes raw audio safely before
+  signaling the orchestrator to finalize.
+- Enhanced error handling around ffmpeg/ffprobe to avoid transient corruption states.
+- Simplified STOP message detection and improved metadata parsing.
+- Basic auth restored for REST API endpoints while remaining disabled for `/ws`.
+- Implemented 
+
+### Fixed
+- Eliminated race conditions when processing the last audio segment.
+- Prevented whisper.cpp from receiving zero-length WAV files.
+- Resolved issues where nginx basic auth could break WebSocket upgrade requests.
+
+## WebSocket Access Token Added
+
+The `/ws` endpoint is intentionally **not protected by nginx basic auth**,
+because it would break the WebSocket upgrade handshake.
+
+Instead, the backend uses a simple **internal WebSocket token** to prevent
+unauthorized clients from opening a streaming session.
+
+### How it works
+
+The frontend must provide a query parameter:
+
+    wss://api.smallpie.fun/ws?token="$API_TOKEN"
+
+The backend validates this token via:
+
+- an environment variable (`SMALLPIE_WS_TOKEN`), or  
+- a local config value (depending on deployment)
+
+If the token does not match, the server immediately closes the connection with 403. 
+
 ------------------------------------------------------------
 
 ## Limitations in v0.5
