@@ -32,6 +32,14 @@ CHUNK_SECONDS = 60  # 1 min chunks for better parallelization
 # How many CPU threads to give to whisper
 WHISPER_THREADS = 6  # on 8-core VPS, leaves some headroom for OS / FastAPI
 
+# === FIX 1: ADD SEMAPHORE ===
+# Limit concurrent whisper-cli processes to 1 to prevent CPU starvation.
+# On an 8-core machine, 1 process using 6 threads is the max safe load.
+WHISPER_SEMAPHORE = threading.Semaphore(1)
+print(f"[config] Whisper concurrency limit set to 1 (using {WHISPER_THREADS} threads per job)")
+# ============================
+
+
 # Storage layout
 BASE_DIR = Path("/root/smallpie-data").resolve()
 AUDIO_DIR = BASE_DIR / "audio"
@@ -129,6 +137,13 @@ def run_ffprobe_duration(path: Path) -> float:
                 str(path),
             ]
         ).decode().strip()
+        
+        # === FIX 2: Handle 'N/A' from ffprobe ===
+        if out == "N/A":
+            print(f"[ffprobe] duration 'N/A' for {path} (likely empty/corrupt segment)", file=sys.stderr)
+            return 0.0
+        # =======================================
+
         return float(out)
     except Exception as e:
         print(f"[ffprobe] failed to read duration for {path}: {e}", file=sys.stderr)
@@ -161,6 +176,7 @@ def slice_wav_to_chunks(wav_path: Path, chunk_seconds: int) -> list[Path]:
     """
     duration = run_ffprobe_duration(wav_path)
     if duration == 0.0:
+        # This now gracefully handles the N/A case from run_ffprobe_duration
         return [wav_path]
 
     chunks = []
@@ -194,42 +210,51 @@ def _transcribe_single_chunk(chunk_path: Path) -> str:
     """
     Call whisper-cli on a single WAV chunk and return plain text transcript.
     Keeps inference local on the VPS.
+    
+    === FIX 1: This function now blocks on WHISPER_SEMAPHORE ===
     """
-    # whisper-cli expects an output prefix; we use a temp prefix path
-    out_prefix = Path(tempfile.NamedTemporaryFile(delete=False).name)
+    
+    print(f"[whisper] waiting for semaphore to run on: {chunk_path}")
+    with WHISPER_SEMAPHORE:
+        print(f"[whisper] semaphore ACQUIRED, running on chunk: {chunk_path}")
+        
+        # whisper-cli expects an output prefix; we use a temp prefix path
+        out_prefix = Path(tempfile.NamedTemporaryFile(delete=False).name)
 
-    cmd = [
-        WHISPER_CLI,
-        "-m", WHISPER_MODEL,
-        "-f", str(chunk_path),
-        "-otxt",
-        "-of", str(out_prefix),
-        "-t", str(WHISPER_THREADS),
-        "-l", "auto",
-    ]
+        cmd = [
+            WHISPER_CLI,
+            "-m", WHISPER_MODEL,
+            "-f", str(chunk_path),
+            "-otxt",
+            "-of", str(out_prefix),
+            "-t", str(WHISPER_THREADS),
+            "-l", "auto",
+        ]
 
-    print(f"[whisper] running on chunk: {chunk_path}")
-    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # This subprocess.run will now only happen one at a time
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    txt_candidate = out_prefix.with_suffix(".txt")
-    if not txt_candidate.exists():
-        # fallback: maybe CLI wrote directly to prefix without .txt
-        txt_candidate = out_prefix
+        txt_candidate = out_prefix.with_suffix(".txt")
+        if not txt_candidate.exists():
+            # fallback: maybe CLI wrote directly to prefix without .txt
+            txt_candidate = out_prefix
 
-    try:
-        text = txt_candidate.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        text = ""
+        try:
+            text = txt_candidate.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            text = ""
 
-    # cleanup
-    try:
-        txt_candidate.unlink(missing_ok=True)
-    except TypeError:
-        # Python < 3.8 compatibility if ever
-        if txt_candidate.exists():
-            txt_candidate.unlink()
-
-    return text
+        # cleanup
+        try:
+            txt_candidate.unlink(missing_ok=True)
+        except TypeError:
+            # Python < 3.8 compatibility if ever
+            if txt_candidate.exists():
+                txt_candidate.unlink()
+        
+        print(f"[whisper] semaphore RELEASED for chunk: {chunk_path}")
+        return text
+    # =========================================================
 
 
 def transcribe_with_whisper_local(audio_file: Path) -> str:
@@ -246,6 +271,7 @@ def transcribe_with_whisper_local(audio_file: Path) -> str:
     parts: list[str] = []
     for idx, chunk in enumerate(chunks, start=1):
         print(f"[pipeline] transcribing chunk {idx}/{len(chunks)}")
+        # This call will now block until the semaphore is free
         text = _transcribe_single_chunk(chunk)
         parts.append(text)
         try:
@@ -588,6 +614,7 @@ def process_wav_chunk_thread(
         # 2. Transcribe each sub-chunk
         parts: list[str] = []
         for idx, sub_chunk in enumerate(sub_chunks, start=1):
+            # This call will now block on the global WHISPER_SEMAPHORE
             text = _transcribe_single_chunk(sub_chunk)
             parts.append(text)
             try:
@@ -625,7 +652,7 @@ def live_transcription_orchestrator(
     The main background thread for a live session.
     - Polls the main audio file every CHUNK_SECONDS.
     - Extracts WAV segments.
-    - Spawns transcription threads.
+    - Spawns transcription threads (which will queue via semaphore).
     - When signaled, runs the final GPT/save pipeline.
     """
     chunk_index = 0
@@ -687,7 +714,7 @@ def live_transcription_orchestrator(
             print(f"[orchestrator] no final segment to process (from {start_sec}s)")
 
         # --- Wait for all transcription threads and run analysis ---
-        print(f"[orchestrator] waiting for {len(processing_threads)} chunk(s) to finish...")
+        print(f"[orchestrator] waiting for {len(processing_threads)} chunk(s) to finish... (queue is managed by semaphore)")
         for t in processing_threads:
             t.join()
 
@@ -941,8 +968,11 @@ async def websocket_record(websocket: WebSocket):
         print(f"[ws] error while receiving audio: {e}", file=sys.stderr)
     finally:
         # --- Finalize and Hand-off ---
+        # By exiting the 'with' block, the file `f` is closed and flushed.
         print(f"[ws] stored streamed audio at {raw_path}")
-        # Signal the orchestrator that the recording is finished
+        
+        # Now we signal the orchestrator that the recording is finished
+        # and the file is ready for final processing.
         recording_stopped.set()
         print("[ws] 'recording_stopped' event set for orchestrator")
 
@@ -965,7 +995,7 @@ def cli_main():
 
     audio_path = Path(sys.argv[1]).resolve()
     if not audio_path.exists():
-        print(f"File not found: {audio_path}")
+        print(f"File not found: {audio_chupath}")
         sys.exit(1)
 
     meeting_name = sys.argv[2] if len(sys.argv) > 2 else "CLI test meeting"
