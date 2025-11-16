@@ -455,7 +455,11 @@ def send_analysis_via_email(
             server.starttls()
             if SMTP_USERNAME and SMTP_PASSWORD:
                 server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg)
+                server.send_message(
+                    msg,
+                    from_addr=SMTP_FROM,          # <= envelope FROM FIX
+                    to_addrs=[recipient],         # <= explicit TO
+                )
 
         print(f"[email] sent meeting {meeting_id} to {recipient}")
     except Exception as e:
