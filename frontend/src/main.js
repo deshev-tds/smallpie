@@ -324,7 +324,7 @@ async function startRecordingAndStreaming(metadata) {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     mediaRecorder = new MediaRecorder(stream, {
-      mimeType: "audio/webm;codecs=opus"
+      mimeType: "audio/ogg;codecs=opus"
     });
 
     mediaRecorder.onstart = () => {
