@@ -34,7 +34,6 @@ WHISPER_THREADS = 6  # on 8-core VPS, leaves some headroom for OS / FastAPI
 
 # === FIX 1: ADD SEMAPHORE ===
 # Limit concurrent whisper-cli processes to 1 to prevent CPU starvation.
-# On an 8-core machine, 1 process using 6 threads is the max safe load.
 WHISPER_SEMAPHORE = threading.Semaphore(1)
 print(f"[config] Whisper concurrency limit set to 1 (using {WHISPER_THREADS} threads per job)")
 # ============================
@@ -165,7 +164,8 @@ def convert_to_wav(src_path: Path) -> Path:
         str(dst),
     ]
     print(f"[ffmpeg] {src_path} -> {dst}")
-    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # This MUST block and wait
+    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     return dst
 
 
@@ -177,7 +177,9 @@ def slice_wav_to_chunks(wav_path: Path, chunk_seconds: int) -> list[Path]:
     duration = run_ffprobe_duration(wav_path)
     if duration == 0.0:
         # This now gracefully handles the N/A case from run_ffprobe_duration
-        return [wav_path]
+        # We return an empty list, not a list with a bad path
+        print(f"[slice_wav] duration is 0.0s for {wav_path}, skipping.")
+        return []
 
     chunks = []
     start = 0.0
@@ -185,6 +187,10 @@ def slice_wav_to_chunks(wav_path: Path, chunk_seconds: int) -> list[Path]:
 
     while start < duration:
         end = min(start + chunk_seconds, duration)
+        # Fix: ensure we don't create 0-length chunks
+        if (end - start) < 0.1:
+            break
+        
         chunk_path = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name)
 
         cmd = [
@@ -214,6 +220,11 @@ def _transcribe_single_chunk(chunk_path: Path) -> str:
     === FIX 1: This function now blocks on WHISPER_SEMAPHORE ===
     """
     
+    # Check for empty/bad file before waiting for semaphore
+    if not chunk_path.exists() or chunk_path.stat().st_size < 100:
+        print(f"[whisper] skipping empty/invalid chunk file: {chunk_path}")
+        return ""
+
     print(f"[whisper] waiting for semaphore to run on: {chunk_path}")
     with WHISPER_SEMAPHORE:
         print(f"[whisper] semaphore ACQUIRED, running on chunk: {chunk_path}")
@@ -247,10 +258,13 @@ def _transcribe_single_chunk(chunk_path: Path) -> str:
         # cleanup
         try:
             txt_candidate.unlink(missing_ok=True)
+            out_prefix.unlink(missing_ok=True)
         except TypeError:
             # Python < 3.8 compatibility if ever
             if txt_candidate.exists():
                 txt_candidate.unlink()
+            if out_prefix.exists():
+                out_prefix.unlink()
         
         print(f"[whisper] semaphore RELEASED for chunk: {chunk_path}")
         return text
@@ -264,6 +278,14 @@ def transcribe_with_whisper_local(audio_file: Path) -> str:
     wav_path = convert_to_wav(audio_file)
     duration = run_ffprobe_duration(wav_path)
     print(f"[pipeline] wav duration ~ {duration:.1f} seconds")
+    
+    if duration == 0.0:
+        print(f"[pipeline] converted WAV {wav_path} has 0.0 duration, aborting transcription")
+        try:
+            wav_path.unlink()
+        except FileNotFoundError:
+            pass
+        return ""
 
     chunks = slice_wav_to_chunks(wav_path, CHUNK_SECONDS)
     print(f"[pipeline] total chunks: {len(chunks)}")
@@ -299,7 +321,7 @@ You are an expert meeting analyst.
 
 Given the raw transcript of a meeting (possibly in multiple languages, with multiple participants), do the following:
 
-1) Reconstruct the conversation as a clean dialog with inferred speakers:
+1) Reconstruct the. conversation as a clean dialog with inferred speakers:
    - Use labels like "Speaker 1:", "Speaker 2:", etc.
    - Group consecutive sentences by the same speaker into paragraphs.
    - Do NOT alternate speakers blindly; infer turns by meaning.
@@ -374,7 +396,7 @@ Score 1–5:
 1 = the two versions diverge strongly
 5 = the two versions describe the same pattern
 
-Return the final bullet points with their self-consistency scores. 
+Return the. final bullet points with their self-consistency scores. 
 
 For each bullet point, add a "Stability Score" (1–5):
 1 = possibly situational or one-off
@@ -499,13 +521,20 @@ def full_meeting_pipeline(
     meeting_id: str | None = None,
     user_email: str | None = None,
 ):
-
+    """
+    This is the *original* pipeline for file uploads.
+    It remains unchanged.
+    """
     if meeting_id is None:
         meeting_id = uuid.uuid4().hex
 
     print(f"[pipeline] starting full pipeline for meeting_id={meeting_id}")
 
     transcript = transcribe_with_whisper_local(audio_path)
+    if not transcript.strip():
+        print(f"[pipeline] empty transcript for {meeting_id}, aborting")
+        return
+
     analysis = analyze_with_gpt(meeting_name, meeting_topic, participants, transcript)
     folder = save_meeting_outputs(meeting_id, meeting_name, transcript, analysis)
     update_traits(transcript, analysis)
@@ -520,7 +549,7 @@ def full_meeting_pipeline(
 
 
 # ============================================================
-# LIVE TRANSCRIPTION ADDITIONS (V2 - POLLING)
+# LIVE TRANSCRIPTION ADDITIONS (V6 - CONCAT)
 # ============================================================
 
 class ThreadSafeTranscript:
@@ -546,100 +575,105 @@ class ThreadSafeTranscript:
             return "\n\n".join(p for p in sorted_parts if p.strip())
 
 
-def extract_wav_segment(raw_path: Path, start_sec: float, end_sec: float | None) -> Path | None:
-    """
-    Uses ffmpeg to extract a segment from the main webm file.
-    Returns the path to the extracted WAV segment, or None on failure.
-    """
-    if not raw_path.exists() or raw_path.stat().st_size == 0:
-        print("[ffmpeg-extract] raw file not ready")
-        return None
-
-    dst = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name)
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i", str(raw_path),
-        "-ss", str(start_sec),
-    ]
-    if end_sec is not None:
-        cmd.extend(["-to", str(end_sec)])
-    
-    cmd.extend([
-        "-ac", "1",
-        "-ar", "16000",
-        str(dst),
-    ])
-
-    print(f"[ffmpeg-extract] running: {cmd}")
-    try:
-        # We use check_output to wait and catch errors
-        subprocess.check_output(cmd, stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as e:
-        print(f"[ffmpeg-extract] failed to extract {start_sec}-{end_sec}: {e.stderr.decode()}", file=sys.stderr)
-        try:
-            dst.unlink()
-        except FileNotFoundError:
-            pass
-        return None
-
-    if dst.exists() and dst.stat().st_size > 44: # 44 bytes = empty WAV header
-        return dst
-    else:
-        print(f"[ffmpeg-extract] output file is empty for {start_sec}-{end_sec}")
-        try:
-            dst.unlink()
-        except FileNotFoundError:
-            pass
-        return None
-
-
-def process_wav_chunk_thread(
-    wav_path: Path,
+def process_concatenated_chunk_thread(
+    raw_chunk_path: Path,
     chunk_index: int,
     transcript_store: ThreadSafeTranscript
 ):
     """
     A single worker thread's target.
-    Takes one *WAV* chunk, processes it, and stores the text.
+    Takes one *concatenated raw webm* chunk, processes it, and stores the text.
+    This re-uses the `transcribe_with_whisper_local` function which
+    handles the WAV conversion, slicing, and semaphore-locked transcription.
     """
     try:
-        print(f"[pipeline-live] worker starting for WAV chunk {chunk_index} ({wav_path})")
-
-        # 1. Slice this ~60s WAV into *whisper* sub-chunks
-        # (This is fast, just ffmpeg copying)
-        sub_chunks = slice_wav_to_chunks(wav_path, CHUNK_SECONDS)
-        print(f"[pipeline-live] chunk {chunk_index} split into {len(sub_chunks)} whisper sub-chunks")
-
-        # 2. Transcribe each sub-chunk
-        parts: list[str] = []
-        for idx, sub_chunk in enumerate(sub_chunks, start=1):
-            # This call will now block on the global WHISPER_SEMAPHORE
-            text = _transcribe_single_chunk(sub_chunk)
-            parts.append(text)
-            try:
-                sub_chunk.unlink()
-            except FileNotFoundError:
-                pass
-
-        # 3. Clean up temp WAV
-        try:
-            wav_path.unlink()
-        except FileNotFoundError:
-            pass
-
-        # 4. Store the final text for this chunk
-        chunk_transcript = "\n\n".join(p for p in parts if p.strip())
+        print(f"[pipeline-live] worker starting for raw chunk {chunk_index} ({raw_chunk_path})")
+        
+        # We reuse the main transcription pipeline, which is now robust.
+        # This will:
+        # 1. Convert the (e.g., 60s) webm to a (60s) wav
+        # 2. Slice that wav into (e.g., 1x 60s) sub-chunks
+        # 3. Transcribe that (1x 60s) sub-chunk (blocking on semaphore)
+        chunk_transcript = transcribe_with_whisper_local(raw_chunk_path)
+        
+        # Store the final text for this chunk
         transcript_store.add(chunk_index, chunk_transcript)
         print(f"[pipeline-live] worker completed for chunk {chunk_index}")
 
     except Exception as e:
         print(f"[pipeline-live] FATAL ERROR processing chunk {chunk_index}: {e}", file=sys.stderr)
         transcript_store.add(chunk_index, f"[[ERROR: Failed to transcribe chunk {chunk_index}]]")
+    finally:
+        # Clean up the concatenated webm chunk
+        try:
+            raw_chunk_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def concatenate_part_files(
+    part_files: list[Path],
+    output_path: Path
+) -> bool:
+    """
+    Uses ffmpeg -f concat to safely join the small webm blobs.
+    Returns True on success, False on failure.
+    """
+    if not part_files:
+        return False
+
+    list_file_path = None
+    try:
+        # 1. Create the concat list file
+        with tempfile.NamedTemporaryFile(delete=False, mode="w", encoding="utf-8") as f:
+            list_file_path = Path(f.name)
+            for part_path in part_files:
+                f.write(f"file '{part_path.resolve()}'\n")
+        
+        print(f"[concat] created list file {list_file_path} for {len(part_files)} parts")
+
+        # 2. Run ffmpeg
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(list_file_path),
+            "-c", "copy",
+            str(output_path),
+        ]
+        
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+        if output_path.exists() and output_path.stat().st_size > 0:
+            print(f"[concat] created valid chunk: {output_path}")
+            return True
+        else:
+            print(f"[concat] ffmpeg ran but output file is empty: {output_path}")
+            return False
+
+    except subprocess.CalledProcessError as e:
+        print(f"[concat] ffmpeg failed: {e.stderr.decode()}", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"[concat] failed: {e}", file=sys.stderr)
+        return False
+    finally:
+        # 3. Clean up part files and list file
+        if list_file_path:
+            try:
+                list_file_path.unlink()
+            except FileNotFoundError:
+                pass
+        for part_path in part_files:
+            try:
+                part_path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def live_transcription_orchestrator(
-    raw_path: Path,
+    data_queue: queue.Queue, # Receives binary blobs from WS
     recording_stopped: threading.Event,
     transcript_store: ThreadSafeTranscript,
     meeting_id: str,
@@ -650,88 +684,81 @@ def live_transcription_orchestrator(
 ):
     """
     The main background thread for a live session.
-    - Polls the main audio file every CHUNK_SECONDS.
-    - Extracts WAV segments.
-    - Spawns transcription threads (which will queue via semaphore).
+    - Pulls data blobs from a queue.
+    - Saves them as temporary part files.
+    - Every CHUNK_SECONDS, concatenates parts into a valid chunk.
+    - Spawns transcription threads (which queue via semaphore).
     - When signaled, runs the final GPT/save pipeline.
     """
     chunk_index = 0
     processing_threads: list[threading.Thread] = []
+    current_part_files: list[Path] = []
+    part_index = 0
+    chunk_start_time = time.time()
     
     try:
         while True:
-            # Wait for CHUNK_SECONDS, or until the recording stops
-            # wait() returns True if the event was set, False on timeout
-            was_stopped = recording_stopped.wait(timeout=CHUNK_SECONDS)
+            try:
+                # Poll the queue with a timeout.
+                # This lets us check the CHUNK_SECONDS timer
+                # and the recording_stopped event regularly.
+                blob = data_queue.get(timeout=0.5)
+            except queue.Empty:
+                # Queue is empty, check our timers
+                now = time.time()
+                is_stopped = recording_stopped.is_set()
+                
+                if (now - chunk_start_time > CHUNK_SECONDS) and not is_stopped:
+                    # Time to cut a chunk
+                    print(f"[orchestrator] {CHUNK_SECONDS}s passed, cutting chunk {chunk_index}")
+                    
+                    if current_part_files:
+                        chunk_path = AUDIO_DIR / f"{meeting_id}_chunk_{chunk_index}.webm"
+                        if concatenate_part_files(current_part_files, chunk_path):
+                            t = threading.Thread(
+                                target=process_concatenated_chunk_thread,
+                                args=(chunk_path, chunk_index, transcript_store),
+                                daemon=True
+                            )
+                            t.start()
+                            processing_threads.append(t)
+                        else:
+                            print(f"[orchestrator] failed to concat chunk {chunk_index}, skipping")
 
-            start_sec = chunk_index * CHUNK_SECONDS
-            end_sec = (chunk_index + 1) * CHUNK_SECONDS
+                    # Reset for next chunk
+                    current_part_files = []
+                    chunk_index += 1
+                    chunk_start_time = now
+                
+                elif is_stopped:
+                    print("[orchestrator] recording stopped, breaking main loop")
+                    break
+                
+                # If neither, just loop and poll queue again
+                continue
 
-            # Try to extract the segment
-            # We add a small delay to let ffmpeg catch up if the file is new
-            if chunk_index == 0:
-                time.sleep(0.5) 
-            
-            wav_chunk_path = extract_wav_segment(raw_path, start_sec, end_sec)
+            # If we're here, we got data from the queue
+            part_path = AUDIO_DIR / f"{meeting_id}_part_{part_index:04d}.webm"
+            part_path.write_bytes(blob)
+            current_part_files.append(part_path)
+            part_index += 1
 
-            if wav_chunk_path:
-                print(f"[orchestrator] successfully extracted segment {chunk_index} ({start_sec}s-{end_sec}s)")
+        # --- Recording has stopped, process the final segment ---
+        print("[orchestrator] processing final audio segment...")
+        if current_part_files:
+            chunk_path = AUDIO_DIR / f"{meeting_id}_chunk_{chunk_index}.webm"
+            if concatenate_part_files(current_part_files, chunk_path):
                 t = threading.Thread(
-                    target=process_wav_chunk_thread,
-                    args=(wav_chunk_path, chunk_index, transcript_store),
+                    target=process_concatenated_chunk_thread,
+                    args=(chunk_path, chunk_index, transcript_store),
                     daemon=True
                 )
                 t.start()
                 processing_threads.append(t)
-                chunk_index += 1
             else:
-                print(f"[orchestrator] failed to extract segment {chunk_index} (file might be too short? recording_stopped={was_stopped})")
-
-            if was_stopped:
-                print("[orchestrator] recording stopped, breaking poll loop")
-                break
-        
-        # --- Recording has stopped, process the final segment ---
-        print("[orchestrator] processing final audio segment...")
-        start_sec = chunk_index * CHUNK_SECONDS
-        
-        # === FIX 3: Robust retry loop for final segment extraction ===
-        wav_chunk_path = None
-        # Try up to 3 times to extract a *valid* final segment
-        for i in range(3):
-            wav_chunk_path = extract_wav_segment(raw_path, start_sec, None)
-            if wav_chunk_path:
-                # Check if the *resulting* wav is valid by probing its duration
-                duration = run_ffprobe_duration(wav_chunk_path)
-                if duration > 0.0:
-                    print(f"[orchestrator] final segment attempt {i+1} successful (duration: {duration}s)")
-                    break # Success!
-                else:
-                    # File was extracted but is empty/corrupt
-                    print(f"[orchestrator] final segment attempt {i+1} gave empty/invalid WAV, retrying...")
-                    try:
-                        wav_chunk_path.unlink() # Delete the bad file
-                    except FileNotFoundError:
-                        pass
-                    wav_chunk_path = None
-                    time.sleep(0.75) # Wait for filesystem
-            else:
-                # Extraction itself failed
-                print(f"[orchestrator] final segment attempt {i+1} failed to extract, retrying...")
-                time.sleep(0.75) # Wait for filesystem
-        # ==============================================================
-
-        if wav_chunk_path:
-            print(f"[orchestrator] successfully extracted final segment {chunk_index} (from {start_sec}s to end)")
-            t = threading.Thread(
-                target=process_wav_chunk_thread,
-                args=(wav_chunk_path, chunk_index, transcript_store),
-                daemon=True
-            )
-            t.start()
-            processing_threads.append(t)
+                print(f"[orchestrator] failed to concat final chunk {chunk_index}, skipping")
         else:
-            print(f"[orchestrator] no final segment to process (from {start_sec}s) after 3 attempts")
+            print("[orchestrator] no final audio parts to process")
 
         # --- Wait for all transcription threads and run analysis ---
         print(f"[orchestrator] waiting for {len(processing_threads)} chunk(s) to finish... (queue is managed by semaphore)")
@@ -744,7 +771,7 @@ def live_transcription_orchestrator(
         transcript = transcript_store.get_full_transcript()
         print(f"[orchestrator] final transcript length: {len(transcript)}")
 
-        if not transcript:
+        if not transcript.strip():
             print("[orchestrator] empty transcript, skipping GPT analysis")
             return
 
@@ -770,14 +797,15 @@ def live_transcription_orchestrator(
         except Exception as save_e:
             print(f"[orchestrator] failed to save error state: {save_e}", file=sys.stderr)
     finally:
-        # Clean up the large raw .webm file
-        try:
-            raw_path.unlink()
-            print(f"[orchestrator] cleaned up {raw_path}")
-        except FileNotFoundError:
-            pass
-        except Exception as e:
-            print(f"[orchestrator] failed to clean up {raw_path}: {e}", file=sys.stderr)
+        # Clean up any remaining part files (e.g., if concat failed)
+        print("[orchestrator] cleaning up remaining part files...")
+        for part_path in current_part_files:
+            try:
+                part_path.unlink()
+            except FileNotFoundError:
+                pass
+        # Note: Concatenated chunks (`_chunk_N.webm`) are cleaned up
+        # by the worker thread (`process_concatenated_chunk_thread`)
 
 
 # ============================================================
@@ -824,10 +852,15 @@ async def upload_meeting_file(
     # Run the heavy lifting in a thread
     def _run():
         try:
+            # We use the original, battle-tested batch pipeline
             full_meeting_pipeline(raw_path, meeting_name, meeting_topic, participants, meeting_id, user_email=user_email)
         finally:
-            # you can decide here if you want to keep the original audio or not
-            pass
+            # We can now safely delete the original upload
+            try:
+                raw_path.unlink()
+                print(f"[upload] cleaned up {raw_path}")
+            except FileNotFoundError:
+                pass
 
     Thread(target=_run, daemon=True).start()
 
@@ -862,38 +895,17 @@ async def websocket_record(websocket: WebSocket):
     participants = qp.get("participants", "Not specified")
     user_email = qp.get("user_email")
     meeting_id = uuid.uuid4().hex
-    first_message_processed = False
 
     print(f"[ws] new recording session meeting_id={meeting_id}")
 
     # --- Live Processing Setup ---
-    # We write to ONE file, and the orchestrator reads from it.
-    raw_path = AUDIO_DIR / f"{meeting_id}.webm"
+    # We use a thread-safe queue to pass data from the async
+    # websocket function to the sync orchestrator thread.
+    data_queue = queue.Queue()
     recording_stopped = threading.Event()
     transcript_store = ThreadSafeTranscript()
 
-    # Start the orchestrator thread. It will wait for the file.
-    orchestrator = threading.Thread(
-        target=live_transcription_orchestrator,
-        args=(
-            raw_path,
-            recording_stopped,
-            transcript_store,
-            meeting_id,
-            meeting_name,
-            meeting_topic,
-            participants,
-            user_email
-        ),
-        daemon=True
-    )
-    
-    # We must handle metadata *before* starting the thread,
-    # or pass the metadata to the thread *after* we receive it.
-    # Easiest is to parse metadata first, then launch.
-    
-    # Let's adjust: we'll parse the *first* message for metadata,
-    # then launch the orchestrator, then start writing audio.
+    # We must handle metadata *before* starting the thread.
     
     try:
         # --- Wait for First Message (Metadata) ---
@@ -905,7 +917,6 @@ async def websocket_record(websocket: WebSocket):
             return
         
         if "text" in msg and msg["text"] is not None:
-            first_message_processed = True
             text = msg["text"].strip()
             try:
                 meta = json.loads(text)
@@ -920,67 +931,65 @@ async def websocket_record(websocket: WebSocket):
             except Exception as e:
                 print(f"[ws] metadata parse error '{text}', using defaults: {e}")
         else:
+            # If first msg is not text, it's a binary blob.
+            # We must handle it.
             print("[ws] first message was not text, using defaults")
-            # If first message is binary, we can't 'un-receive' it.
-            # This logic assumes metadata *always* comes first.
-            # We'll just have to write the binary if that's what we got.
-            pass # We'll handle the binary in the main loop
+            if "bytes" in msg and msg["bytes"] is not None:
+                data_queue.put(msg["bytes"])
 
         # --- Now, start the orchestrator ---
         print(f"[ws] resolved: name={meeting_name} topic={meeting_topic}")
-        orchestrator_args = (
-            raw_path, recording_stopped, transcript_store,
-            meeting_id, meeting_name, meeting_topic, participants, user_email
-        )
         orchestrator = threading.Thread(
             target=live_transcription_orchestrator,
-            args=orchestrator_args,
+            args=(
+                data_queue,
+                recording_stopped,
+                transcript_store,
+                meeting_id,
+                meeting_name,
+                meeting_topic,
+                participants,
+                user_email
+            ),
             daemon=True
         )
         orchestrator.start()
         print("[ws] live transcription orchestrator started")
 
         # --- Main Audio Loop ---
-        with raw_path.open("ab") as f:
-            
-            # If the first message was binary, write it now
+        while True:
+            msg = await websocket.receive()
+
+            if msg.get("type") == "websocket.disconnect":
+                print("[ws] websocket.disconnect received")
+                break
+
+            # Binary audio chunk (a self-contained blob)
             if "bytes" in msg and msg["bytes"] is not None:
-                f.write(msg["bytes"])
+                data_queue.put(msg["bytes"])
+                continue
 
-            while True:
-                msg = await websocket.receive()
-
-                if msg.get("type") == "websocket.disconnect":
-                    print("[ws] websocket.disconnect received")
-                    break
-
-                # Binary audio chunk
-                if "bytes" in msg and msg["bytes"] is not None:
-                    f.write(msg["bytes"])
-                    continue
-
-                # Text message (STOP / END / noise)
-                if "text" in msg and msg["text"] is not None:
-                    text = msg["text"].strip()
-                    
-                    # STOP detection (JSON)
-                    try:
-                        parsed = json.loads(text)
-                        if isinstance(parsed, dict) and parsed.get("type", "").lower() == "end":
-                            print("[ws] received stop marker (json)")
-                            break
-                    except Exception:
-                        pass
-
-                    # STOP detection (plain text)
-                    upper = text.upper()
-                    if upper in ("STOP", "END"):
-                        print(f"[ws] received stop marker: {upper}")
+            # Text message (STOP / END / noise)
+            if "text" in msg and msg["text"] is not None:
+                text = msg["text"].strip()
+                
+                # STOP detection (JSON)
+                try:
+                    parsed = json.loads(text)
+                    if isinstance(parsed, dict) and parsed.get("type", "").lower() == "end":
+                        print("[ws] received stop marker (json)")
                         break
-                    
-                    # We ignore any other text (e.g., late metadata)
-                    print("[ws] ignoring text message:", repr(text))
-                    continue
+                except Exception:
+                    pass
+
+                # STOP detection (plain text)
+                upper = text.upper()
+                if upper in ("STOP", "END"):
+                    print(f"[ws] received stop marker: {upper}")
+                    break
+                
+                print("[ws] ignoring text message:", repr(text))
+                continue
 
     except WebSocketDisconnect:
         print("[ws] client disconnected")
@@ -988,21 +997,8 @@ async def websocket_record(websocket: WebSocket):
         print(f"[ws] error while receiving audio: {e}", file=sys.stderr)
     finally:
         # --- Finalize and Hand-off ---
-        # By exiting the 'with' block, the file `f` is closed and flushed.
-        print(f"[ws] stored streamed audio at {raw_path}")
-        
-        # === FIX 4: Wait for OS to flush file "footer" to disk ===
-        # This is the fix for the "N/A" race condition.
-        # We must wait *after* closing the file handle but *before*
-        # signaling the orchestrator that the file is ready.
-        print("[ws] waiting 2s for OS to finalize file...")
-        time.sleep(2.0)
-        # ==========================================================
-        
-        # Now we signal the orchestrator that the recording is finished
-        # and the file is ready for final processing.
+        print(f"[ws] client disconnected, signaling orchestrator to stop")
         recording_stopped.set()
-        print("[ws] 'recording_stopped' event set for orchestrator")
 
         # Try to close cleanly
         try:
