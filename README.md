@@ -1,7 +1,7 @@
 # smallpie
 Meeting intelligence, but cute :3
 
-Version 0.5 (frontend + local Python pipeline)
+Version 0.6 (frontend + local Python pipeline)
 
 smallpie is a tiny, browser-based (explicity mobile-friendly), tasty, portable prototype that turns meetings (ones that it can listen to from your phone, 
 computer, raspberry, your grandma's laptop...) into structured transcripts, analysis, and actionable items.
@@ -14,7 +14,7 @@ The system currently has two main components:
 The backend with WebSockets arrives in version 0.7.
 
 
-## Нож 16, 2025: v0.6.0 - Streaming Transcription Architecture
+## Nov 16, 2025: v0.6.0 - Streaming Transcription Architecture
 
 ### Added
 - Introduced a new **live transcription orchestrator**, enabling
