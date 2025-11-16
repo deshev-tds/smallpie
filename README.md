@@ -63,17 +63,52 @@ The backend validates this token via:
 If the token does not match, the server immediately closes the connection with 403. 
 
 ------------------------------------------------------------
+## Limitations in v0.6
 
-## Limitations in v0.5
+### 1. Near-real-time transcription (not true streaming)
+The system processes audio in fixed-duration chunks (e.g., 60 seconds).  
+This enables incremental transcription but is not equivalent to continuous, token-level live streaming.
 
-- No WebSocket backend
-- No HTTPS (yet)
-- Frontend audio recording is NOT connected to backend
-- No ICS generation
-- No email sending
-- No multi-user support
+### 2. CPU-bound whisper.cpp performance
+All transcription is performed locally via whisper.cpp on my tiny server's CPU.  
+There is no GPU acceleration, parallel model execution, or adaptive load balancing.
 
-All of this lands in **v0.7+**.
+### 3. Chunk boundary alignment is not guaranteed
+Audio segmentation occurs strictly by duration.  
+Chunks may start or end mid-sentence, which can reduce linguistic coherence in partial transcripts.
+
+### 4. Last-segment accuracy may vary
+While final-chunk duration handling has improved, abrupt WebSocket termination can still create
+edge cases where the ending segment is incomplete or requires special handling.
+
+### 5. Not tested multiple speakers diarization
+v0.6 assumes a multy-speaker transcription pipeline, but it has been tested with 4 speaker at maximum. 
+Multi-speaker diarization's thresholds are not yet fully known.
+
+### 6. No transcription retries or fallback logic
+If whisper.cpp fails, times out, or returns an error, the system does not currently retry or fall back to an alternative strategy.
+
+### 7. Trait generation remains append-only
+The traits file is append-only and does not validate the semantic correctness of entries produced by the LLM.
+
+### 8. WebSocket authentication is minimal
+The `/ws` endpoint uses a static internal token.  
+There is no JWT, key rotation, or per-session authorization mechanism.
+
+### 9. Temporary file cleanup is limited
+Temporary WAV files may persist if the pipeline terminates unexpectedly.  
+Automated cleanup is not yet implemented.
+
+### 10. No metrics or monitoring
+The system currently lacks instrumentation for:
+- whisper.cpp latency
+- queue backlog
+- transcription throughput
+- pipeline errors
+- WebSocket duration
+
+### 11. Frontend error reporting is minimal
+The frontend does not currently display detailed pipeline failures, partial-results status, or whisper health indicators.
 
 ------------------------------------------------------------
 
