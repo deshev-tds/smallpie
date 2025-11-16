@@ -333,7 +333,7 @@ Given the raw transcript of a meeting (possibly in multiple languages, with mult
    - Do NOT alternate speakers blindly; infer turns by meaning.
 
 2) Extract and list:
-   - Concrete actions Damyan must take.
+   - Concrete actions each of the participants must take.
    - Concrete actions other participants must take.
    - Dependencies or blocked items (who/what they depend on).
    - Deadlines or time references, if present.
