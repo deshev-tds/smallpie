@@ -165,7 +165,7 @@ def convert_to_wav(src_path: Path) -> Path:
     ]
     print(f"[ffmpeg] {src_path} -> {dst}")
     # This MUST block and wait
-    # We add check=True to raise an error if ffmpeg fails (e.g., on concat)
+    # We add check=True to raise an error if ffmpeg fails
     subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     return dst
 
@@ -272,28 +272,28 @@ def _transcribe_single_chunk(chunk_path: Path) -> str:
     # =========================================================
 
 
-def transcribe_with_whisper_local(audio_file: Path) -> str:
-
-    print(f"[pipeline] starting local transcription for {audio_file}")
-
-    try:
-        wav_path = convert_to_wav(audio_file)
-    except subprocess.CalledProcessError as e:
-        print(f"[pipeline] FATAL: convert_to_wav failed for {audio_file}: {e.stderr.decode()}", file=sys.stderr)
-        return "" # Return empty transcript on conversion failure
-
-    duration = run_ffprobe_duration(wav_path)
+def transcribe_wav_file(wav_file: Path) -> str:
+    """
+    Transcribes a single WAV file.
+    This replaces the old `transcribe_with_whisper_local` by
+    removing the `convert_to_wav` step, as we now receive WAVs.
+    """
+    print(f"[pipeline] starting local transcription for {wav_file}")
+    
+    duration = run_ffprobe_duration(wav_file)
     print(f"[pipeline] wav duration ~ {duration:.1f} seconds")
     
     if duration == 0.0:
-        print(f"[pipeline] converted WAV {wav_path} has 0.0 duration, aborting transcription")
+        print(f"[pipeline] WAV {wav_file} has 0.0 duration, aborting transcription")
         try:
-            wav_path.unlink()
+            wav_file.unlink()
         except FileNotFoundError:
             pass
         return ""
 
-    chunks = slice_wav_to_chunks(wav_path, CHUNK_SECONDS)
+    # We are already given a ~60s chunk, but we run it through
+    # slice_wav_to_chunks just in case it's slightly over.
+    chunks = slice_wav_to_chunks(wav_file, CHUNK_SECONDS)
     print(f"[pipeline] total chunks: {len(chunks)}")
 
     parts: list[str] = []
@@ -308,7 +308,7 @@ def transcribe_with_whisper_local(audio_file: Path) -> str:
             pass
 
     try:
-        wav_path.unlink()
+        wav_file.unlink() # Clean up the input WAV chunk
     except FileNotFoundError:
         pass
 
@@ -534,11 +534,24 @@ def full_meeting_pipeline(
     if meeting_id is None:
         meeting_id = uuid.uuid4().hex
 
-    print(f"[pipeline] starting full pipeline for meeting_id={meeting_id}")
+    print(f"[pipeline-upload] starting full pipeline for meeting_id={meeting_id}")
 
-    transcript = transcribe_with_whisper_local(audio_file)
+    # We must convert the uploaded file (webm, m4a, etc.) to WAV first
+    try:
+        wav_path = convert_to_wav(audio_path)
+    except subprocess.CalledProcessError as e:
+        print(f"[pipeline-upload] FATAL: convert_to_wav failed for {audio_path}: {e.stderr.decode()}", file=sys.stderr)
+        return
+        
+    if not wav_path.exists() or wav_path.stat().st_size == 0:
+        print(f"[pipeline-upload] conversion failed for {audio_path}")
+        return
+
+    # Now we call the transcription function that expects a WAV
+    transcript = transcribe_wav_file(wav_path)
+    
     if not transcript.strip():
-        print(f"[pipeline] empty transcript for {meeting_id}, aborting")
+        print(f"[pipeline-upload] empty transcript for {meeting_id}, aborting")
         return
 
     analysis = analyze_with_gpt(meeting_name, meeting_topic, participants, transcript)
@@ -551,11 +564,11 @@ def full_meeting_pipeline(
     except Exception as e:
         print(f"[email] unexpected exception in full_meeting_pipeline for {meeting_id}: {e}", file=sys.stderr)
 
-    print(f"[pipeline] meeting {meeting_id} complete, stored at {folder}")
+    print(f"[pipeline-upload] meeting {meeting_id} complete, stored at {folder}")
 
 
 # ============================================================
-# LIVE TRANSCRIPTION ADDITIONS (V10 - BINARY APPEND)
+# LIVE TRANSCRIPTION ADDITIONS (V11 - RE-MUXING)
 # ============================================================
 
 class ThreadSafeTranscript:
@@ -581,26 +594,21 @@ class ThreadSafeTranscript:
             return "\n\n".join(p for p in sorted_parts if p.strip())
 
 
-def process_concatenated_chunk_thread(
-    raw_chunk_path: Path,
+def process_wav_chunk_thread(
+    wav_chunk_path: Path,
     chunk_index: int,
     transcript_store: ThreadSafeTranscript
 ):
     """
     A single worker thread's target.
-    Takes one *concatenated raw webm* chunk, processes it, and stores the text.
-    This re-uses the `transcribe_with_whisper_local` function which
-    handles the WAV conversion, slicing, and semaphore-locked transcription.
+    Takes one *WAV* chunk, processes it, and stores the text.
     """
     try:
-        print(f"[pipeline-live] worker starting for raw chunk {chunk_index} ({raw_chunk_path})")
+        print(f"[pipeline-live] worker starting for WAV chunk {chunk_index} ({wav_chunk_path})")
         
-        # We reuse the main transcription pipeline, which is now robust.
-        # This will:
-        # 1. Convert the (e.g., 60s) webm to a (60s) wav
-        # 2. Slice that wav into (e.g., 1x 60s) sub-chunks
-        # 3. Transcribe that (1x 60s) sub-chunk (blocking on semaphore)
-        chunk_transcript = transcribe_with_whisper_local(raw_chunk_path)
+        # We use the base transcribe_wav_file, which is now
+        # modified to accept a WAV file directly.
+        chunk_transcript = transcribe_wav_file(wav_chunk_path)
         
         # Store the final text for this chunk
         transcript_store.add(chunk_index, chunk_transcript)
@@ -610,50 +618,73 @@ def process_concatenated_chunk_thread(
         print(f"[pipeline-live] FATAL ERROR processing chunk {chunk_index}: {e}", file=sys.stderr)
         transcript_store.add(chunk_index, f"[[ERROR: Failed to transcribe chunk {chunk_index}]]")
     finally:
-        # Clean up the concatenated webm chunk
-        try:
-            raw_chunk_path.unlink()
-        except FileNotFoundError:
-            pass
+        # Clean up the WAV chunk, it's already been cleaned by the pipeline
+        pass
 
 
-def concatenate_part_files(
+def build_and_extract_wav_chunk(
     part_files: list[Path],
-    output_path: Path
-) -> bool:
+    start_sec: float,
+    duration_sec: float | None, # None = to end of file
+    chunk_index: int
+) -> Path | None:
     """
-    (V10) Performs a simple binary append (like 'cat') to join the blobs.
-    This works because the browser sends [HEADER+DATA] + [DATA] + [DATA]...
+    1. Binary-appends all part_files into a single .webm stream.
+    2. Uses ffmpeg to seek, convert, and extract the desired WAV chunk.
+    3. Cleans up the large .webm stream file.
     """
-    print(f"[concat] starting binary append for {len(part_files)} parts -> {output_path}")
-    if not part_files:
-        return False
-
+    
+    # 1. Create the full stream file
+    full_stream_path = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".webm").name)
     try:
-        with output_path.open("wb") as f_out:
+        print(f"[orchestrator] building full stream for chunk {chunk_index} from {len(part_files)} parts...")
+        with full_stream_path.open("wb") as f_out:
             for part_path in part_files:
-                if part_path.exists() and part_path.stat().st_size > 0:
-                    f_out.write(part_path.read_bytes())
-                else:
-                    print(f"[concat] skipping empty/missing part file: {part_path}")
+                f_out.write(part_path.read_bytes())
         
-        if output_path.exists() and output_path.stat().st_size > 0:
-            print(f"[concat] created valid chunk via binary append: {output_path}")
-            return True
-        else:
-            print(f"[concat] append succeeded but output file is empty: {output_path}")
-            return False
+        # 2. Extract the WAV chunk
+        wav_chunk_path = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name)
+        
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i", str(full_stream_path),
+            "-ss", str(start_sec),
+        ]
+        if duration_sec is not None:
+             cmd.extend(["-t", str(duration_sec)])
+        
+        cmd.extend([
+            "-ac", "1",
+            "-ar", "16000",
+            str(wav_chunk_path),
+        ])
+        
+        print(f"[orchestrator] extracting chunk {chunk_index}: {' '.join(cmd)}")
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
-    except Exception as e:
-        print(f"[concat] binary append failed: {e}", file=sys.stderr)
-        return False
-    finally:
-        # Clean up part files
-        for part_path in part_files:
+        if wav_chunk_path.exists() and wav_chunk_path.stat().st_size > 44:
+            return wav_chunk_path
+        else:
+            print(f"[orchestrator] extraction for chunk {chunk_index} produced empty file")
             try:
-                part_path.unlink()
+                wav_chunk_path.unlink()
             except FileNotFoundError:
                 pass
+            return None
+
+    except subprocess.CalledProcessError as e:
+        print(f"[orchestrator] FATAL: ffmpeg extraction failed for chunk {chunk_index}: {e.stderr.decode()}", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"[orchestrator] FATAL: build_and_extract failed for chunk {chunk_index}: {e}", file=sys.stderr)
+        return None
+    finally:
+        # 3. Clean up the large temp stream file
+        try:
+            full_stream_path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def live_transcription_orchestrator(
@@ -667,21 +698,20 @@ def live_transcription_orchestrator(
     user_email: str | None
 ):
     """
-    The main background thread for a live session.
-    - Pulls data blobs from a queue.
-    - Saves them as temporary part files.
-    - Every CHUNK_SECONDS, concatenates parts into a valid chunk.
-    - Spawns transcription threads (which queue via semaphore).
-    - When signaled, runs the final GPT/save pipeline.
+    (V11) The main background thread for a live session.
+    - Pulls data blobs from a queue and saves them to a *persistent list*.
+    - Every CHUNK_SECONDS, re-builds the *entire* stream and
+      spawns an ffmpeg process to extract the *newest* chunk.
     """
     chunk_index = 0
     processing_threads: list[threading.Thread] = []
-    current_part_files: list[Path] = []
+    
+    # This list holds all blobs *for the entire session*
+    all_part_files: list[Path] = []
     part_index = 0
     chunk_start_time = time.time()
     
     try:
-        # === Corrected loop logic ===
         while True:
             try:
                 # Poll the queue with a timeout.
@@ -689,65 +719,55 @@ def live_transcription_orchestrator(
                 # If we got data, save it
                 part_path = AUDIO_DIR / f"{meeting_id}_part_{part_index:04d}.webm"
                 part_path.write_bytes(blob)
-                current_part_files.append(part_path)
+                all_part_files.append(part_path)
                 part_index += 1
             except queue.Empty:
                 # Queue was empty, just pass and go to timer check
                 pass
 
-            # This timer check now runs EVERY loop,
-            # regardless of whether the queue was empty.
             now = time.time()
             is_stopped = recording_stopped.is_set()
             
-            # We check the timer *first*.
-            # We only cut a chunk if the timer is up AND we're not stopped.
             if (now - chunk_start_time > CHUNK_SECONDS) and not is_stopped:
-                # Time to cut a chunk
                 print(f"[orchestrator] {CHUNK_SECONDS}s passed, cutting chunk {chunk_index}")
                 
-                if current_part_files:
-                    chunk_path = AUDIO_DIR / f"{meeting_id}_chunk_{chunk_index}.webm"
-                    # We pass a copy of the list, so we can clear it
-                    if concatenate_part_files(list(current_part_files), chunk_path):
-                        t = threading.Thread(
-                            target=process_concatenated_chunk_thread,
-                            args=(chunk_path, chunk_index, transcript_store),
-                            daemon=True
-                        )
-                        t.start()
-                        processing_threads.append(t)
-                    else:
-                        print(f"[orchestrator] failed to concat chunk {chunk_index}, skipping")
-
-                    # Reset for next chunk
-                    current_part_files = [] # Clear the list for new parts
+                if all_part_files:
+                    # We are processing the chunk from [index*60s] to [(index+1)*60s]
+                    start_sec = chunk_index * CHUNK_SECONDS
+                    
+                    # Spawn a thread to do the heavy ffmpeg work
+                    # We pass a *copy* of the list of parts
+                    t = threading.Thread(
+                        target=build_and_extract_wav_chunk,
+                        args=(list(all_part_files), start_sec, CHUNK_SECONDS, chunk_index, transcript_store),
+                        daemon=True
+                    )
+                    t.start()
+                    processing_threads.append(t)
                 else:
                     print(f"[orchestrator] timer fired but no parts to process for chunk {chunk_index}")
 
                 chunk_index += 1
                 chunk_start_time = now
             
-            # After checking the timer, we check if we should stop.
             elif is_stopped:
                 print("[orchestrator] recording stopped, breaking main loop")
                 break
-        # ===================================
         
         # --- Recording has stopped, process the final segment ---
         print("[orchestrator] processing final audio segment...")
-        if current_part_files:
-            chunk_path = AUDIO_DIR / f"{meeting_id}_chunk_{chunk_index}.webm"
-            if concatenate_part_files(current_part_files, chunk_path):
-                t = threading.Thread(
-                    target=process_concatenated_chunk_thread,
-                    args=(chunk_path, chunk_index, transcript_store),
-                    daemon=True
-                )
-                t.start()
-                processing_threads.append(t)
-            else:
-                print(f"[orchestrator] failed to concat final chunk {chunk_index}, skipping")
+        if all_part_files:
+            start_sec = chunk_index * CHUNK_SECONDS
+            
+            # For the final chunk, we don't set a duration,
+            # ffmpeg just reads to the end.
+            t = threading.Thread(
+                target=build_and_extract_wav_chunk,
+                args=(list(all_part_files), start_sec, None, chunk_index, transcript_store),
+                daemon=True
+            )
+            t.start()
+            processing_threads.append(t)
         else:
             print("[orchestrator] no final audio parts to process")
 
@@ -788,15 +808,13 @@ def live_transcription_orchestrator(
         except Exception as save_e:
             print(f"[orchestrator] failed to save error state: {save_e}", file=sys.stderr)
     finally:
-        # Clean up any remaining part files (e.g., if concat failed)
-        print("[orchestrator] cleaning up remaining part files...")
-        for part_path in current_part_files:
+        # Clean up all part files
+        print(f"[orchestrator] cleaning up {len(all_part_files)} part files...")
+        for part_path in all_part_files:
             try:
                 part_path.unlink()
             except FileNotFoundError:
                 pass
-        # Note: Concatenated chunks (`_chunk_N.webm`) are cleaned up
-        # by the worker thread (`process_concatenated_chunk_thread`)
 
 
 # ============================================================
