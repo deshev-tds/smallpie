@@ -443,8 +443,9 @@ async function startRecordingAndStreaming(metadata) {
 
     // === THE FIX ===
     // 300ms is too small and sends fragments.
-    // 5000ms (5s) ensures each blob is a valid, self-contained file.
-    mediaRecorder.start(5000); 
+    // 5000ms (5s) ensures each blob is a valid, self-contained file
+    // that ffmpeg's concat protocol can understand.
+    mediaRecorder.start(5000);
   } catch (err) {
     console.error("getUserMedia error:", err);
     const statusText = document.getElementById("status-text");
