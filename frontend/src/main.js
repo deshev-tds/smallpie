@@ -3,7 +3,7 @@ import "/src/styles/base.css";
 // API CONFIG
 // IMPORTANT: set API_TOKEN to the same value as SMALLPIE_ACCESS_TOKEN on the backend.
 const API_WS_URL = "wss://api.smallpie.fun/ws";
-const API_TOKEN = "Iuhfjkdskeqrrgyubhoijkbcvt7gyiuhkjbwr";
+const API_TOKEN = "Iuhfjkdskeqrrgyubhoijkbcvt7gyiuhkjbcvt7gyiuhkjbwr";
 
 // STATIC ELEMENTS
 const recButton = document.getElementById("start-recording");
@@ -24,6 +24,7 @@ const tmplStatus = document.getElementById("tmpl-status");
 
 // STATE
 let mediaRecorder = null;
+let mediaStream = null; // <-- keep track of the underlying MediaStream
 let ws = null;
 let recordingState = "idle"; // idle | recording | finishing | finished | error
 let recordingStartTime = null;
@@ -420,6 +421,8 @@ async function startRecordingAndStreaming(metadata) {
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaStream = stream; // <-- keep a reference so we can stop tracks later
+
     mediaRecorder = new MediaRecorder(stream, {
       mimeType: "audio/webm;codecs=opus",
     });
@@ -456,6 +459,13 @@ function stopRecording() {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop();
   }
+
+  // Explicitly release the microphone
+  if (mediaStream) {
+    mediaStream.getTracks().forEach((track) => track.stop());
+    mediaStream = null;
+  }
+
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "end" }));
   }
