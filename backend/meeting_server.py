@@ -165,6 +165,7 @@ def convert_to_wav(src_path: Path) -> Path:
     ]
     print(f"[ffmpeg] {src_path} -> {dst}")
     # This MUST block and wait
+    # We add check=True to raise an error if ffmpeg fails (e.g., on concat)
     subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     return dst
 
@@ -275,7 +276,12 @@ def transcribe_with_whisper_local(audio_file: Path) -> str:
 
     print(f"[pipeline] starting local transcription for {audio_file}")
 
-    wav_path = convert_to_wav(audio_file)
+    try:
+        wav_path = convert_to_wav(audio_file)
+    except subprocess.CalledProcessError as e:
+        print(f"[pipeline] FATAL: convert_to_wav failed for {audio_file}: {e.stderr.decode()}", file=sys.stderr)
+        return "" # Return empty transcript on conversion failure
+
     duration = run_ffprobe_duration(wav_path)
     print(f"[pipeline] wav duration ~ {duration:.1f} seconds")
     
@@ -530,7 +536,7 @@ def full_meeting_pipeline(
 
     print(f"[pipeline] starting full pipeline for meeting_id={meeting_id}")
 
-    transcript = transcribe_with_whisper_local(audio_file)
+    transcript = transcribe_with_whisper_local(audio_path)
     if not transcript.strip():
         print(f"[pipeline] empty transcript for {meeting_id}, aborting")
         return
@@ -628,7 +634,11 @@ def concatenate_part_files(
         with tempfile.NamedTemporaryFile(delete=False, mode="w", encoding="utf-8") as f:
             list_file_path = Path(f.name)
             for part_path in part_files:
-                f.write(f"file '{part_path.resolve()}'\n")
+                # Add a check to ensure the part file is valid before adding
+                if part_path.exists() and part_path.stat().st_size > 0:
+                    f.write(f"file '{part_path.resolve()}'\n")
+                else:
+                    print(f"[concat] skipping empty/missing part file: {part_path}")
         
         print(f"[concat] created list file {list_file_path} for {len(part_files)} parts")
 
@@ -643,6 +653,7 @@ def concatenate_part_files(
             str(output_path),
         ]
         
+        # We MUST use check=True to catch errors from ffmpeg
         subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
         if output_path.exists() and output_path.stat().st_size > 0:
@@ -653,6 +664,7 @@ def concatenate_part_files(
             return False
 
     except subprocess.CalledProcessError as e:
+        # This will now catch the "EBML header parsing failed" error
         print(f"[concat] ffmpeg failed: {e.stderr.decode()}", file=sys.stderr)
         return False
     except Exception as e:
@@ -724,7 +736,8 @@ def live_transcription_orchestrator(
                 
                 if current_part_files:
                     chunk_path = AUDIO_DIR / f"{meeting_id}_chunk_{chunk_index}.webm"
-                    if concatenate_part_files(current_part_files, chunk_path):
+                    # We pass a copy of the list, so we can clear it
+                    if concatenate_part_files(list(current_part_files), chunk_path):
                         t = threading.Thread(
                             target=process_concatenated_chunk_thread,
                             args=(chunk_path, chunk_index, transcript_store),
@@ -735,8 +748,11 @@ def live_transcription_orchestrator(
                     else:
                         print(f"[orchestrator] failed to concat chunk {chunk_index}, skipping")
 
-                # Reset for next chunk
-                current_part_files = []
+                    # Reset for next chunk
+                    current_part_files = [] # Clear the list for new parts
+                else:
+                    print(f"[orchestrator] timer fired but no parts to process for chunk {chunk_index}")
+
                 chunk_index += 1
                 chunk_start_time = now
             
