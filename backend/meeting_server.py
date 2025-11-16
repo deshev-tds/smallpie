@@ -13,12 +13,13 @@ import json
 from pathlib import Path
 from threading import Thread
 
+import smtplib
+from email.message import EmailMessage
+
 from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect, Header, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
-
-
 
 # Local whisper.cpp CLI + model
 WHISPER_CLI = "/root/whisper.cpp/build/bin/whisper-cli"
@@ -43,30 +44,44 @@ TRAITS_FILE = BASE_DIR / "damyan_traits.txt"
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ============================================================
+# EMAIL / SMTP CONFIG
+# ============================================================
+
+SMTP_HOST = os.getenv("SMALLPIE_SMTP_HOST")
+SMTP_PORT = int(os.getenv("SMALLPIE_SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMALLPIE_SMTP_USERNAME")
+SMTP_PASSWORD = os.getenv("SMALLPIE_SMTP_PASSWORD")
+SMTP_FROM = os.getenv("SMALLPIE_SMTP_FROM") or SMTP_USERNAME or "no-reply@smallpie.local"
+
+EMAIL_ENABLED = bool(SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD)
+if not EMAIL_ENABLED:
+    print("[email] SMTP not fully configured; email sending is disabled")
+
+# ============================================================
 # SIMPLE BEARER TOKEN AUTH
 # ============================================================
 
-ACCESS_TOKEN = os.getenv("SMALLPIE_ACCESS_TOKEN")
-AUTH_ENABLED = ACCESS_TOKEN is not None and ACCESS_TOKEN != ""
+ACCESS_TOKEN = os.getenv("SMALLPIE_ACCESS_TOKEN", "").strip()
+AUTH_ENABLED = bool(ACCESS_TOKEN)
 
-if not AUTH_ENABLED:
-    print("[auth] WARNING: SMALLPIE_ACCESS_TOKEN not set. Authentication is DISABLED.")
+if AUTH_ENABLED:
+    print("[auth] Bearer token auth ENABLED for HTTP + WS")
 else:
-    print("[auth] Authentication ENABLED using SMALLPIE_ACCESS_TOKEN.")
+    print("[auth] Bearer token auth DISABLED (SMALLPIE_ACCESS_TOKEN not set)")
 
 
-def verify_bearer_token(authorization_header: str | None) -> None:
+def verify_bearer_token(authorization: str | None):
     """
-    Verify the Authorization: Bearer <token> header for HTTP endpoints.
-    If AUTH_ENABLED is False, this is a no-op.
+    Enforce Authorization: Bearer <token> for HTTP endpoints
+    when SMALLPIE_ACCESS_TOKEN is set. Otherwise, it's a no-op.
     """
     if not AUTH_ENABLED:
         return
 
-    if not authorization_header:
+    if not authorization:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
 
-    parts = authorization_header.split(" ", 1)
+    parts = authorization.split()
     if len(parts) != 2 or parts[0].lower() != "bearer":
         raise HTTPException(status_code=401, detail="Invalid Authorization header format")
 
@@ -378,12 +393,82 @@ def save_meeting_outputs(meeting_id: str, meeting_name: str, transcript: str, an
     return folder
 
 
+def send_analysis_via_email(
+    recipient: str | None,
+    meeting_name: str,
+    meeting_id: str,
+    folder: Path,
+) -> None:
+    """
+    If recipient and SMTP config are available, email the analysis (and optionally transcript)
+    to the user. Best-effort only: never raise out of here.
+    """
+    if not recipient:
+        return
+
+    if not EMAIL_ENABLED:
+        print("[email] EMAIL_ENABLED is False; skipping email send for", meeting_id)
+        return
+
+    try:
+        transcript_path = folder / "transcript.txt"
+        analysis_path = folder / "analysis.txt"
+
+        transcript = ""
+        analysis = ""
+
+        if analysis_path.exists():
+            try:
+                analysis = analysis_path.read_text(encoding="utf-8")
+            except Exception as e:
+                print(f"[email] failed to read analysis.txt for {meeting_id}: {e}", file=sys.stderr)
+
+        if transcript_path.exists():
+            try:
+                transcript = transcript_path.read_text(encoding="utf-8")
+            except Exception as e:
+                print(f"[email] failed to read transcript.txt for {meeting_id}: {e}", file=sys.stderr)
+
+        msg = EmailMessage()
+        msg["Subject"] = f"[smallpie] Notes for '{meeting_name}'"
+        msg["From"] = SMTP_FROM
+        msg["To"] = recipient
+
+        parts: list[str] = []
+        parts.append(f"Here are your smallpie notes for meeting '{meeting_name}' (ID: {meeting_id}).")
+        parts.append("")
+        if analysis:
+            parts.append("=== ANALYSIS ===")
+            parts.append(analysis)
+            parts.append("")
+        if transcript:
+            parts.append("=== TRANSCRIPT (may be truncated) ===")
+            if len(transcript) > 15000:
+                parts.append(transcript[:15000])
+                parts.append("\n[transcript truncated]")
+            else:
+                parts.append(transcript)
+
+        msg.set_content("\n".join(parts))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            if SMTP_USERNAME and SMTP_PASSWORD:
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+
+        print(f"[email] sent meeting {meeting_id} to {recipient}")
+    except Exception as e:
+        print(f"[email] failed to send email for meeting {meeting_id}: {e}", file=sys.stderr)
+
+
 def full_meeting_pipeline(
     audio_path: Path,
     meeting_name: str,
     meeting_topic: str,
     participants: str,
     meeting_id: str | None = None,
+    user_email: str | None = None,
 ):
 
     if meeting_id is None:
@@ -395,6 +480,12 @@ def full_meeting_pipeline(
     analysis = analyze_with_gpt(meeting_name, meeting_topic, participants, transcript)
     folder = save_meeting_outputs(meeting_id, meeting_name, transcript, analysis)
     update_traits(transcript, analysis)
+
+    # Best-effort email delivery (does not affect pipeline success)
+    try:
+        send_analysis_via_email(user_email, meeting_name, meeting_id, folder)
+    except Exception as e:
+        print(f"[email] unexpected exception in full_meeting_pipeline for {meeting_id}: {e}", file=sys.stderr)
 
     print(f"[pipeline] meeting {meeting_id} complete, stored at {folder}")
 
@@ -421,6 +512,7 @@ async def upload_meeting_file(
     meeting_topic: str = Form(...),
     participants: str = Form(...),
     file: UploadFile = File(...),
+    user_email: str | None = Form(default=None),
     authorization: str | None = Header(default=None),
 ):
     # HTTP Bearer auth (only enforced if SMALLPIE_ACCESS_TOKEN is set)
@@ -442,7 +534,7 @@ async def upload_meeting_file(
     # Run the heavy lifting in a thread
     def _run():
         try:
-            full_meeting_pipeline(raw_path, meeting_name, meeting_topic, participants, meeting_id)
+            full_meeting_pipeline(raw_path, meeting_name, meeting_topic, participants, meeting_id, user_email=user_email)
         finally:
             # you can decide here if you want to keep the original audio or not
             pass
@@ -457,10 +549,6 @@ async def upload_meeting_file(
         }
     )
 
-
-# ============================================================
-# ACTIVE WS ENDPOINT: METADATA + BINARY CHUNKS + STOP/END
-# ============================================================
 
 # ============================================================
 # ACTIVE WS ENDPOINT: METADATA + BINARY CHUNKS + STOP/END
@@ -483,6 +571,7 @@ async def websocket_record(websocket: WebSocket):
     meeting_name = qp.get("meeting_name", "Untitled meeting")
     meeting_topic = qp.get("meeting_topic", "Not specified")
     participants = qp.get("participants", "Not specified")
+    user_email = qp.get("user_email")
 
     meeting_id = uuid.uuid4().hex
     raw_path = AUDIO_DIR / f"{meeting_id}.webm"
@@ -497,7 +586,7 @@ async def websocket_record(websocket: WebSocket):
             while True:
                 msg = await websocket.receive()
 
-                # WebSocket disconnected event
+                # WebSocket disconnected event from Starlette
                 if msg.get("type") == "websocket.disconnect":
                     print("[ws] websocket.disconnect received")
                     break
@@ -505,6 +594,7 @@ async def websocket_record(websocket: WebSocket):
                 # Binary audio chunk
                 if "bytes" in msg and msg["bytes"] is not None:
                     f.write(msg["bytes"])
+                    # optional ACK; currently silent
                     continue
 
                 # Text message (metadata / STOP / END / noise)
@@ -520,6 +610,7 @@ async def websocket_record(websocket: WebSocket):
                                 meeting_name = meta.get("meeting_name", meeting_name)
                                 meeting_topic = meta.get("meeting_topic", meeting_topic)
                                 participants = meta.get("participants", participants)
+                                user_email = meta.get("user_email", user_email)
                                 print("[ws] metadata received:", meta)
                                 print(f"[ws] resolved: name={meeting_name} topic={meeting_topic} participants={participants}")
                                 continue
@@ -541,11 +632,11 @@ async def websocket_record(websocket: WebSocket):
                         print(f"[ws] received stop marker: {upper}")
                         break
 
+                    # Any other text is ignored
                     print("[ws] ignoring text message:", repr(text))
                     continue
 
                 # Any other kind of message is ignored
-
         except WebSocketDisconnect:
             print("[ws] client disconnected")
         except Exception as e:
@@ -556,7 +647,7 @@ async def websocket_record(websocket: WebSocket):
     # Start the heavy pipeline in a background thread
     def _run():
         try:
-            full_meeting_pipeline(raw_path, meeting_name, meeting_topic, participants, meeting_id)
+            full_meeting_pipeline(raw_path, meeting_name, meeting_topic, participants, meeting_id, user_email=user_email)
         finally:
             pass
 
@@ -588,7 +679,7 @@ def cli_main():
     meeting_topic = sys.argv[3] if len(sys.argv) > 3 else "CLI topic"
     participants = sys.argv[4] if len(sys.argv) > 4 else "CLI participants"
 
-    full_meeting_pipeline(audio_path, meeting_name, meeting_topic, participants)
+    full_meeting_pipeline(audio_path, meeting_name, meeting_topic, participants, None, user_email=None)
 
 
 if __name__ == "__main__":
