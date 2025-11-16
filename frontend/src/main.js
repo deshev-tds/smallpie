@@ -202,8 +202,9 @@ function wireDynamicHandlers() {
       const name = document.getElementById("meeting-name").value.trim();
       const topic = document.getElementById("meeting-topic").value.trim();
       const participants = document.getElementById("meeting-participants").value.trim();
+      const email = document.getElementById("meeting-email").value.trim();
 
-      if (!name || !topic || !participants) {
+      if (!name || !topic || !participants || !email) {
         alert("Please fill in all fields.");
         return;
       }
@@ -218,7 +219,12 @@ function wireDynamicHandlers() {
         statusSubtext.innerText = "We’re preparing to record your meeting in real time.";
 
       try {
-        await startRecordingAndStreaming({ name, topic, participants });
+        await startRecordingAndStreaming({
+          name,
+          topic,
+          participants,
+          user_email: email,
+        });
       } catch (err) {
         console.error(err);
         if (statusText) statusText.innerText = "Error starting recording.";

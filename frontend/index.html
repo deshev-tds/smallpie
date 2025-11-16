@@ -235,6 +235,22 @@
             />
           </div>
 
+          <!-- Email address for sending notes -->
+          <div class="flex flex-col gap-1">
+            <label for="meeting-email" class="text-xs font-medium text-textPrimary dark:text-darkText">
+              Email address
+            </label>
+            <input
+              id="meeting-email"
+              type="email"
+              class="w-full rounded-xl border border-bgSubtle dark:border-darkBgSoft bg-bgSoft dark:bg-darkBg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-gold"
+              placeholder="Where should we send your notes?"
+            />
+            <p class="text-[11px] text-textMuted dark:text-darkMuted">
+              We’ll email you the summary and transcript. No newsletters, no spam.
+            </p>
+          </div>
+
           <div class="flex items-center justify-between pt-1">
             <button
               type="button"
@@ -330,23 +346,23 @@
   </template>
 
   <script type="module" src="src/main.js"></script>
-<!-- Status bubble (appears then fades out) -->
-<div id="status-bubble"
-     style="
-       position: fixed;
-       bottom: 32px;
-       left: 50%;
-       transform: translateX(-50%);
-       background: #1b1b1b;
-       padding: 14px 18px;
-       border-radius: 12px;
-       border: 1px solid #2a2a2a;
-       font-size: 14px;
-       opacity: 0;
-       transition: opacity 0.5s ease;
-       pointer-events: none;
-       z-index: 9999;
-     ">
-</div>
+  <!-- Status bubble (appears then fades out) -->
+  <div id="status-bubble"
+       style="
+         position: fixed;
+         bottom: 32px;
+         left: 50%;
+         transform: translateX(-50%);
+         background: #1b1b1b;
+         padding: 14px 18px;
+         border-radius: 12px;
+         border: 1px solid #2a2a2a;
+         font-size: 14px;
+         opacity: 0;
+         transition: opacity 0.5s ease;
+         pointer-events: none;
+         z-index: 9999;
+       ">
+  </div>
 </body>
 </html>
