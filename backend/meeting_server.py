@@ -536,7 +536,7 @@ def full_meeting_pipeline(
 
     print(f"[pipeline] starting full pipeline for meeting_id={meeting_id}")
 
-    transcript = transcribe_with_whisper_local(audio_path)
+    transcript = transcribe_with_whisper_local(audio_file)
     if not transcript.strip():
         print(f"[pipeline] empty transcript for {meeting_id}, aborting")
         return
@@ -555,7 +555,7 @@ def full_meeting_pipeline(
 
 
 # ============================================================
-# LIVE TRANSCRIPTION ADDITIONS (V7 - CONCAT)
+# LIVE TRANSCRIPTION ADDITIONS (V10 - BINARY APPEND)
 # ============================================================
 
 class ThreadSafeTranscript:
@@ -622,61 +622,33 @@ def concatenate_part_files(
     output_path: Path
 ) -> bool:
     """
-    Uses ffmpeg -f concat to safely join the small webm blobs.
-    Returns True on success, False on failure.
+    (V10) Performs a simple binary append (like 'cat') to join the blobs.
+    This works because the browser sends [HEADER+DATA] + [DATA] + [DATA]...
     """
+    print(f"[concat] starting binary append for {len(part_files)} parts -> {output_path}")
     if not part_files:
         return False
 
-    list_file_path = None
     try:
-        # 1. Create the concat list file
-        with tempfile.NamedTemporaryFile(delete=False, mode="w", encoding="utf-8") as f:
-            list_file_path = Path(f.name)
+        with output_path.open("wb") as f_out:
             for part_path in part_files:
-                # Add a check to ensure the part file is valid before adding
                 if part_path.exists() and part_path.stat().st_size > 0:
-                    f.write(f"file '{part_path.resolve()}'\n")
+                    f_out.write(part_path.read_bytes())
                 else:
                     print(f"[concat] skipping empty/missing part file: {part_path}")
         
-        print(f"[concat] created list file {list_file_path} for {len(part_files)} parts")
-
-        # 2. Run ffmpeg
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(list_file_path),
-            "-c", "copy",
-            str(output_path),
-        ]
-        
-        # We MUST use check=True to catch errors from ffmpeg
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-
         if output_path.exists() and output_path.stat().st_size > 0:
-            print(f"[concat] created valid chunk: {output_path}")
+            print(f"[concat] created valid chunk via binary append: {output_path}")
             return True
         else:
-            print(f"[concat] ffmpeg ran but output file is empty: {output_path}")
+            print(f"[concat] append succeeded but output file is empty: {output_path}")
             return False
 
-    except subprocess.CalledProcessError as e:
-        # This will now catch the "EBML header parsing failed" error
-        print(f"[concat] ffmpeg failed: {e.stderr.decode()}", file=sys.stderr)
-        return False
     except Exception as e:
-        print(f"[concat] failed: {e}", file=sys.stderr)
+        print(f"[concat] binary append failed: {e}", file=sys.stderr)
         return False
     finally:
-        # 3. Clean up part files and list file
-        if list_file_path:
-            try:
-                list_file_path.unlink()
-            except FileNotFoundError:
-                pass
+        # Clean up part files
         for part_path in part_files:
             try:
                 part_path.unlink()
@@ -709,7 +681,7 @@ def live_transcription_orchestrator(
     chunk_start_time = time.time()
     
     try:
-        # === FIX: Corrected loop logic ===
+        # === Corrected loop logic ===
         while True:
             try:
                 # Poll the queue with a timeout.
