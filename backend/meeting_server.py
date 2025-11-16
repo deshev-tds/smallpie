@@ -462,9 +462,13 @@ async def upload_meeting_file(
 # ACTIVE WS ENDPOINT: METADATA + BINARY CHUNKS + STOP/END
 # ============================================================
 
+# ============================================================
+# ACTIVE WS ENDPOINT: METADATA + BINARY CHUNKS + STOP/END
+# ============================================================
+
 @app.websocket("/ws")
 async def websocket_record(websocket: WebSocket):
- 
+
     # Auth via ?token=... in query params (only enforced if SMALLPIE_ACCESS_TOKEN is set)
     qp = websocket.query_params
     ws_token = qp.get("token")
@@ -493,7 +497,7 @@ async def websocket_record(websocket: WebSocket):
             while True:
                 msg = await websocket.receive()
 
-                # WebSocket disconnected event from Starlette
+                # WebSocket disconnected event
                 if msg.get("type") == "websocket.disconnect":
                     print("[ws] websocket.disconnect received")
                     break
@@ -501,14 +505,14 @@ async def websocket_record(websocket: WebSocket):
                 # Binary audio chunk
                 if "bytes" in msg and msg["bytes"] is not None:
                     f.write(msg["bytes"])
-                    # optional ACK; currently silent
                     continue
 
                 # Text message (metadata / STOP / END / noise)
                 if "text" in msg and msg["text"] is not None:
                     text = msg["text"].strip()
+
+                    # FIRST TEXT MESSAGE → try to parse metadata
                     if not first_message_processed:
-                        # Try to parse metadata JSON on the first text message
                         first_message_processed = True
                         try:
                             meta = json.loads(text)
@@ -522,25 +526,26 @@ async def websocket_record(websocket: WebSocket):
                         except Exception as e:
                             print("[ws] metadata parse error:", e)
 
-                    # Stop markers (string or JSON)
-                        try:
-                            parsed = json.loads(text)
-                            if isinstance(parsed, dict) and parsed.get("type", "").lower() == "end":
-                                print("[ws] received stop marker (json)")
-                                break
-                        except:
-                            pass
-                        
-                        upper = text.upper()
-                        if upper in ("STOP", "END"):
-                            print(f"[ws] received stop marker: {upper}")
+                    # STOP detection (JSON)
+                    try:
+                        parsed = json.loads(text)
+                        if isinstance(parsed, dict) and parsed.get("type", "").lower() == "end":
+                            print("[ws] received stop marker (json)")
                             break
+                    except Exception:
+                        pass
 
-                    # Any other text is ignored
+                    # STOP detection (plain text)
+                    upper = text.upper()
+                    if upper in ("STOP", "END"):
+                        print(f"[ws] received stop marker: {upper}")
+                        break
+
                     print("[ws] ignoring text message:", repr(text))
                     continue
 
                 # Any other kind of message is ignored
+
         except WebSocketDisconnect:
             print("[ws] client disconnected")
         except Exception as e:
@@ -553,7 +558,6 @@ async def websocket_record(websocket: WebSocket):
         try:
             full_meeting_pipeline(raw_path, meeting_name, meeting_topic, participants, meeting_id)
         finally:
-            # decide whether to delete raw_path or keep history
             pass
 
     Thread(target=_run, daemon=True).start()
@@ -562,7 +566,6 @@ async def websocket_record(websocket: WebSocket):
     try:
         await websocket.close()
     except RuntimeError:
-        # already closed
         pass
 
 
