@@ -330,5 +330,23 @@
   </template>
 
   <script type="module" src="src/main.js"></script>
+<!-- Status bubble (appears then fades out) -->
+<div id="status-bubble"
+     style="
+       position: fixed;
+       bottom: 32px;
+       left: 50%;
+       transform: translateX(-50%);
+       background: #1b1b1b;
+       padding: 14px 18px;
+       border-radius: 12px;
+       border: 1px solid #2a2a2a;
+       font-size: 14px;
+       opacity: 0;
+       transition: opacity 0.5s ease;
+       pointer-events: none;
+       z-index: 9999;
+     ">
+</div>
 </body>
 </html>

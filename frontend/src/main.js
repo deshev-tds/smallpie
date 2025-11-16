@@ -49,7 +49,14 @@ function showScreen(template, options = {}) {
   if (template) {
     const node = template.content.cloneNode(true);
     flowContainer.appendChild(node);
-    if (showBackdropFlag) showBackdrop();
+
+    if (showBackdropFlag) {
+      showBackdrop();
+    } else {
+      // NEW: статус картата да не идва с backdrop, не замъгляваме страницата
+      backdrop.classList.add("hidden");
+    }
+
     wireDynamicHandlers();
   } else {
     hideBackdrop();
@@ -137,8 +144,7 @@ function fadeOutStatusCardAndFinish() {
     return;
   }
 
-  // Keep REC disabled while status is visible.
-  // Wait 3 seconds, then fade out, then fully reset UI.
+  // Държим REC disabled (state = "finishing"), докато картата fade-не.
   setTimeout(() => {
     card.style.opacity = "0";
     setTimeout(() => {
@@ -428,7 +434,8 @@ async function startRecordingAndStreaming(metadata) {
     const statusSubtext = document.getElementById("status-subtext");
     if (statusText) statusText.innerText = "Microphone error.";
     if (statusSubtext)
-      statusSubtext.innerText = "We can’t access your microphone. Check permissions and try again.";
+      statusSubtext.innerText =
+        "We can’t access your microphone. Check permissions and try again.";
     recordErrorEl.classList.remove("hidden");
     setRecordingState("error");
   }
