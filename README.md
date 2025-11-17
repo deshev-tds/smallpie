@@ -1,20 +1,22 @@
 # smallpie
 Meeting intelligence, but cute :3
 
-Version 0.6 (frontend + local Python pipeline)
+Version 0.6.1 (frontend + local Python pipeline)
 
 smallpie is a tiny, browser-based (explicity mobile-friendly), tasty, portable prototype that turns meetings (ones that it can listen to from your phone, 
-computer, raspberry, your grandma's laptop...) into structured transcripts, analysis, and actionable items.
+computer, raspberry, your grandma's laptop...) into structured transcripts, analysis, and actionable items sent to your email minutes after the meeting ends.
+
+No data is being kept long-terms, each session data is flushed after the final email is sent to the user. smallpie doesn't need your data for "improving the product quality" or to "keep in touch with the latest promotions". 
 
 The system currently has two main components:
 
-- Frontend (Vite + Tailwind, mobile-friendly, runs anywhere)
-- Python pipeline (local Whisper.cpp + GPT-5.1 analysis)
+- Frontend (Vite + Tailwind, mobile-friendly, but runs anywhere where a modern browser and a mic exists - to be tested on a fridge soon)
+- Python pipeline (local Whisper.cpp + semantic diarization + LLM analysis)
 
-The backend with WebSockets arrives in version 0.7.
+The backend with real-time transcription and acoustic diarization arrives in version 0.8.x.
 
 
-## Nov 16, 2025: v0.6.0 - Streaming Transcription Architecture
+## Nov 16, 2025: v0.6.1 - Streaming Transcription Architecture
 
 ### Added
 - Introduced a new **live transcription orchestrator**, enabling
@@ -34,7 +36,6 @@ The backend with WebSockets arrives in version 0.7.
 - Enhanced error handling around ffmpeg/ffprobe to avoid transient corruption states.
 - Simplified STOP message detection and improved metadata parsing.
 - Basic auth restored for REST API endpoints while remaining disabled for `/ws`.
-- Implemented 
 
 ### Fixed
 - Eliminated race conditions when processing the last audio segment.
