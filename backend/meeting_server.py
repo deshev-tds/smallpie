@@ -323,33 +323,47 @@ def analyze_with_gpt(meeting_name: str, meeting_topic: str, participants: str, t
     print("[gpt] starting meeting analysis")
 
     prompt = f"""
-You are an expert meeting analyst.
+You are an expert meeting analyst and diarization corrector.
 
-Given the raw transcript of a meeting (possibly in multiple languages, with multiple participants), do the following:
+Your job is to take a raw transcript that may contain:
+- inconsistent speaker boundaries,
+- incorrect speaker switches,
+- short fragmented lines,
+- semantic drift between segments,
+- accidental alternation between “Speaker X” labels,
+- or split utterances that belong together.
 
-1) Reconstruct the. conversation as a clean dialog with inferred speakers:
-   - Use labels like "Speaker 1:", "Speaker 2:", etc.
-   - Group consecutive sentences by the same speaker into paragraphs.
-   - Do NOT alternate speakers blindly; infer turns by meaning.
+Before performing any meeting analysis, apply a *speaker smoothing and correction pass*:
 
-2) Extract and list:
-   - Concrete actions each of the participants must take.
-   - Concrete actions other participants must take.
-   - Dependencies or blocked items (who/what they depend on).
-   - Deadlines or time references, if present.
+=== DIAIRIZATION CONSOLIDATION LAYER ===
+1) Reconstruct the conversation with inferred speakers using the minimal number of speaker labels needed.
+2) Merge any consecutive segments that clearly belong to the same speaker based on coherence, grammar, tone, topic continuity, or clear conversational flow.
+3) Correct speaker clusters that are obviously mis-assigned:
+   - If two adjacent segments have nearly identical semantic footprint, merge them.
+   - If a speaker “switch” is only 1 sentence long but contextually implausible, treat it as the same speaker.
+4) Preserve long-range continuity:
+   - A speaker should not rapidly alternate unless the transcript indicates an actual exchange.
+   - When the transcript contains ambiguous or messy parts, choose the assignment that results in the fewest contradictions.
+5) Mark every correction you make using inline comments like:
+   [merged], [reassigned], [consolidated], [uncertain].
 
-3) Identify:
-   - Misalignments in expectations.
-   - Risks (technical, process, interpersonal).
+After this correction layer, output the cleaned dialog.
+
+=== MEETING ANALYSIS (same as before) ===
+Based solely on the cleaned dialog:
+1) Identify action items (per participant, and others).
+2) Identify dependencies/blockers.
+3) Identify deadlines or time references.
+4) Identify misalignments, risks (process/technical/interpersonal).
 
 Rules:
-- Base everything ONLY on the transcript content.
-- If something is implied but not explicit, mark it as "inferred".
-- Output must be in English, even if the transcript is not.
+- Do NOT hallucinate new events; use only what is present.
+- If an insight is inferred but not explicit, tag it as "(inferred)".
+- Always output everything in English.
 
 Meeting name: {meeting_name}
 Topic: {meeting_topic}
-Participants (count or description): {participants}
+Participants: {participants}
 
 --- TRANSCRIPT START ---
 {transcript}
@@ -371,50 +385,23 @@ def update_traits(transcript: str, analysis: str):
     print("[traits] updating traits file")
 
     trait_prompt = f"""
-You are maintaining a long-term professional behavioral and cognitive profiles of participants in a meeting.
+You are maintaining long-term professional behavioral profiles.
 
-Your goal is NOT to describe their personality in general terms, but to extract stable,
-recurring patterns of thinking, communication, decision-making, and collaboration
-that appear across this specific meeting transcript.
+Before extracting traits, apply a *speaker and utterance integrity check*:
+- Use the cleaned dialog already produced.
+- If the transcript contains unclear speaker boundaries, rely on the smoothing annotations such as [merged], [reassigned], [uncertain].
+- When evaluating a behavioral pattern, consider only those segments that have stable attribution.
 
-These traits must:
-- be grounded ONLY in evidence from the transcript + analysis
-- describe patterns, not one-off moments
-- be phrased as practical insights that future AI assistants can use to work with them effectively
-- avoid psychological diagnoses or speculation
-- avoid praise, value-judgments, or flattery
-- avoid overgeneralizing beyond the evidence
+Extract up to 5 recurring behavioral or cognitive patterns, following these rules:
+- Base patterns ONLY on stable, confidently attributed utterances.
+- Avoid using segments marked [uncertain] unless unavoidable.
+- Avoid one-off moments; focus on repeated tendencies.
 
-Produce up to 5 bullet points, each written as:
-
-**Pattern:** A short, evidence-based description of a recurring behavior or cognitive style.  
-**Implications:** A practical guideline for AI systems collaborating with him.
-
-Example format (not content):
-- **Pattern:** Tends to organize information linearly when uncertain.  
-  **Implications:** Provide responses with clear sequencing and minimal ambiguity.
-
-After producing the 5 bullet points, generate a second independent
-version of the same 5 points using a different internal reasoning path.
-Then compute a "self-consistency score" for each point:
-
-Score 1–5:
-1 = the two versions diverge strongly
-5 = the two versions describe the same pattern
-
-Return the. final bullet points with their self-consistency scores. 
-
-For each bullet point, add a "Stability Score" (1–5):
-1 = possibly situational or one-off
-5 = highly likely to be a recurring pattern across multiple future meetings
-
-Use this exact style.
-
-TRANSCRIPT:
-{transcript}
-
-ANALYSIS:
-{analysis}
+For each trait, return:
+**Pattern:**  
+**Implications:**  
+**Self-Consistency Score (1–5):**  
+**Stability Score (1–5):**
 """
 
     resp = client.responses.create(
