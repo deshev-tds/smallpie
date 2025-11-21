@@ -216,7 +216,7 @@ async function startVisualizer(stream) {
   // Microphone input is often very quiet (-40dB).
   // We boost it by 5x specifically for the visualizer so bars actually move.
   gainNode = audioContext.createGain();
-  gainNode.gain.value = 5.0; 
+  gainNode.gain.value = 10.0; 
   
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 64; // 32 bins
