@@ -26,7 +26,7 @@ const tmplStatus = document.getElementById("tmpl-status");
 
 // STATE
 let mediaRecorder = null;
-let mediaStream = null;
+let mediaStream = null; // <-- keep track of the underlying MediaStream
 let ws = null;
 let recordingState = "idle"; // idle | recording | finishing | finished | error
 let recordingStartTime = null;
@@ -37,6 +37,7 @@ let droppedFile = null;
 // VISUALIZER STATE
 let audioContext = null;
 let analyser = null;
+let audioSource = null; // Global reference to prevent garbage collection
 let visualizerFrameId = null;
 
 // ------------------------------------------------
@@ -197,21 +198,34 @@ function stopRecordingTimer() {
 // AUDIO VISUALIZER LOGIC
 // ------------------------------------------------
 
-function startVisualizer(stream) {
+async function startVisualizer(stream) {
   // 1. Create AudioContext if not exists
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
   }
   
+  // === CRITICAL FIX: Resume context if suspended (autoplay policy) ===
+  if (audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
+  
   // 2. Create Source & Analyser
-  const source = audioContext.createMediaStreamSource(stream);
+  // Store source in a global var to prevent garbage collection breaking the graph
+  audioSource = audioContext.createMediaStreamSource(stream);
   analyser = audioContext.createAnalyser();
-  analyser.fftSize = 64; // Low resolution for simple bars
-  source.connect(analyser);
+  
+  // Increase FFT size for better resolution in low frequencies (voice)
+  analyser.fftSize = 256; 
+  audioSource.connect(analyser);
 
-  const bufferLength = analyser.frequencyBinCount;
+  const bufferLength = analyser.frequencyBinCount; // 128
   const dataArray = new Uint8Array(bufferLength);
   const ctx = visualizerCanvas.getContext("2d");
+
+  // Updated indices to map approximately to speech frequencies (200Hz - 6kHz)
+  // With sampleRate ~48kHz & fftSize 256, bin width is ~187Hz.
+  // [1]=187Hz, [3]=560Hz, [7]=1.3k, [15]=2.8k, [31]=5.8k
+  const indices = [1, 3, 7, 15, 31]; 
 
   const draw = () => {
     visualizerFrameId = requestAnimationFrame(draw);
@@ -225,21 +239,16 @@ function startVisualizer(stream) {
     // Style - match the "Rose" active color (#e11d48)
     ctx.fillStyle = "#e11d48";
 
-    // We will draw a few bars (e.g., 5 bars) centered
-    const bars = 5;
+    const bars = indices.length;
     const gap = 3;
     const totalWidth = visualizerCanvas.width;
     const barWidth = (totalWidth / bars) - gap;
     
-    // Simple averaging to get a "loudness" equivalent for different buckets
-    // Just picking 5 distinct points from the low-mid frequency range
-    const indices = [2, 5, 8, 11, 14]; 
-
     indices.forEach((dataIndex, i) => {
       const value = dataArray[dataIndex] || 0;
       // Normalize 0-255 to 0.1 - 1.0 height scale
-      // We want some minimal height so it doesn't disappear completely
       let percent = value / 255;
+      // Min height so bars are visible
       if (percent < 0.1) percent = 0.1; 
 
       const barHeight = visualizerCanvas.height * percent;
@@ -268,17 +277,19 @@ function stopVisualizer() {
   const ctx = visualizerCanvas.getContext("2d");
   ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
 
-  // Close context to free resources? 
-  // Usually reusing AudioContext is better, but let's just suspend or disconnect.
-  // For simplicity in this small app, we can close it or just disconnect the source/analyser.
+  // Cleanup graph
+  if (audioSource) {
+    audioSource.disconnect();
+    audioSource = null;
+  }
+  
   if (analyser) {
     analyser.disconnect();
     analyser = null;
   }
+
+  // Clean close of context
   if (audioContext && audioContext.state !== 'closed') {
-     // Optional: audioContext.close(); 
-     // If we close it, we must create new one next time. 
-     // Let's close it to be safe with managing streams.
      audioContext.close();
      audioContext = null;
   }
@@ -324,8 +335,6 @@ function wireDynamicHandlers() {
         statusSubtext.innerText = "We’re preparing to record your meeting in real time.";
 
       try {
-        // FIXED: Changed keys from 'name'/'topic' to 'meeting_name'/'meeting_topic'
-        // to match what meeting_server.py expects in the metadata JSON.
         await startRecordingAndStreaming({
           meeting_name: name,
           meeting_topic: topic,
@@ -529,8 +538,8 @@ async function startRecordingAndStreaming(metadata) {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaStream = stream; 
 
-    // === START VISUALIZER ===
-    startVisualizer(stream);
+    // === START VISUALIZER (Async to allow context resume) ===
+    await startVisualizer(stream);
 
     mediaRecorder = new MediaRecorder(stream, {
       mimeType: "audio/webm;codecs=opus",
