@@ -220,9 +220,11 @@ function wireDynamicHandlers() {
         statusSubtext.innerText = "We’re preparing to record your meeting in real time.";
 
       try {
+        // FIXED: Changed keys from 'name'/'topic' to 'meeting_name'/'meeting_topic'
+        // to match what meeting_server.py expects in the metadata JSON.
         await startRecordingAndStreaming({
-          name,
-          topic,
+          meeting_name: name,
+          meeting_topic: topic,
           participants,
           user_email: email,
         });
