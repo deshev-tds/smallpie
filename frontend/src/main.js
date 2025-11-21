@@ -11,6 +11,8 @@ const recordLabel = document.getElementById("record-label");
 const recordHelper = document.getElementById("record-helper");
 const recordTimerEl = document.getElementById("record-timer");
 const recordErrorEl = document.getElementById("record-error");
+// VISUALIZER ELEMENT
+const visualizerCanvas = document.getElementById("audio-visualizer");
 
 const btnUseFile = document.getElementById("use-file");
 
@@ -24,13 +26,18 @@ const tmplStatus = document.getElementById("tmpl-status");
 
 // STATE
 let mediaRecorder = null;
-let mediaStream = null; // <-- keep track of the underlying MediaStream
+let mediaStream = null;
 let ws = null;
 let recordingState = "idle"; // idle | recording | finishing | finished | error
 let recordingStartTime = null;
 let recordingTimerInterval = null;
 let currentMode = "idle"; // idle | record | upload
 let droppedFile = null;
+
+// VISUALIZER STATE
+let audioContext = null;
+let analyser = null;
+let visualizerFrameId = null;
 
 // ------------------------------------------------
 // FLOW UTILS
@@ -99,6 +106,7 @@ function setRecordingState(state) {
       recordLabel.textContent = "REC";
       recordHelper.textContent = "Tap REC to start listening.";
       recordTimerEl.classList.add("hidden");
+      visualizerCanvas.classList.add("hidden"); // Hide visualizer
       stopRecordingTimer();
       break;
 
@@ -110,6 +118,7 @@ function setRecordingState(state) {
       recordLabel.textContent = "STOP";
       recordHelper.textContent = "Recording… tap STOP when you’re done.";
       recordTimerEl.classList.remove("hidden");
+      visualizerCanvas.classList.remove("hidden"); // Show visualizer
       startRecordingTimer();
       break;
 
@@ -118,6 +127,8 @@ function setRecordingState(state) {
       recButton.classList.add("opacity-70", "cursor-not-allowed");
       recButton.disabled = true;
       recordHelper.textContent = "Sending the last audio chunks to smallpie.";
+      // Keep visualizer hidden or active? usually keep it hidden as mic is effectively off
+      visualizerCanvas.classList.add("hidden");
       break;
 
     case "finished":
@@ -127,6 +138,7 @@ function setRecordingState(state) {
       recordLabel.textContent = "REC";
       recordHelper.textContent = "Recording finished. Tap REC to start a new one.";
       recordTimerEl.classList.add("hidden");
+      visualizerCanvas.classList.add("hidden");
       stopRecordingTimer();
       break;
 
@@ -137,6 +149,7 @@ function setRecordingState(state) {
       recordLabel.textContent = "REC";
       recordHelper.textContent = "Something went wrong. You can try again.";
       recordErrorEl.classList.remove("hidden");
+      visualizerCanvas.classList.add("hidden");
       stopRecordingTimer();
       break;
   }
@@ -177,6 +190,97 @@ function stopRecordingTimer() {
   if (recordingTimerInterval) {
     clearInterval(recordingTimerInterval);
     recordingTimerInterval = null;
+  }
+}
+
+// ------------------------------------------------
+// AUDIO VISUALIZER LOGIC
+// ------------------------------------------------
+
+function startVisualizer(stream) {
+  // 1. Create AudioContext if not exists
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  
+  // 2. Create Source & Analyser
+  const source = audioContext.createMediaStreamSource(stream);
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 64; // Low resolution for simple bars
+  source.connect(analyser);
+
+  const bufferLength = analyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+  const ctx = visualizerCanvas.getContext("2d");
+
+  const draw = () => {
+    visualizerFrameId = requestAnimationFrame(draw);
+
+    // Get data
+    analyser.getByteFrequencyData(dataArray);
+
+    // Clear
+    ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+
+    // Style - match the "Rose" active color (#e11d48)
+    ctx.fillStyle = "#e11d48";
+
+    // We will draw a few bars (e.g., 5 bars) centered
+    const bars = 5;
+    const gap = 3;
+    const totalWidth = visualizerCanvas.width;
+    const barWidth = (totalWidth / bars) - gap;
+    
+    // Simple averaging to get a "loudness" equivalent for different buckets
+    // Just picking 5 distinct points from the low-mid frequency range
+    const indices = [2, 5, 8, 11, 14]; 
+
+    indices.forEach((dataIndex, i) => {
+      const value = dataArray[dataIndex] || 0;
+      // Normalize 0-255 to 0.1 - 1.0 height scale
+      // We want some minimal height so it doesn't disappear completely
+      let percent = value / 255;
+      if (percent < 0.1) percent = 0.1; 
+
+      const barHeight = visualizerCanvas.height * percent;
+      
+      // Center vertically
+      const x = i * (barWidth + gap) + gap/2;
+      const y = (visualizerCanvas.height - barHeight) / 2;
+
+      // Draw rounded rect
+      ctx.beginPath();
+      ctx.roundRect(x, y, barWidth, barHeight, 4);
+      ctx.fill();
+    });
+  };
+
+  draw();
+}
+
+function stopVisualizer() {
+  if (visualizerFrameId) {
+    cancelAnimationFrame(visualizerFrameId);
+    visualizerFrameId = null;
+  }
+  
+  // Clear canvas
+  const ctx = visualizerCanvas.getContext("2d");
+  ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+
+  // Close context to free resources? 
+  // Usually reusing AudioContext is better, but let's just suspend or disconnect.
+  // For simplicity in this small app, we can close it or just disconnect the source/analyser.
+  if (analyser) {
+    analyser.disconnect();
+    analyser = null;
+  }
+  if (audioContext && audioContext.state !== 'closed') {
+     // Optional: audioContext.close(); 
+     // If we close it, we must create new one next time. 
+     // Let's close it to be safe with managing streams.
+     audioContext.close();
+     audioContext = null;
   }
 }
 
@@ -423,7 +527,10 @@ async function startRecordingAndStreaming(metadata) {
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaStream = stream; // <-- keep a reference so we can stop tracks later
+    mediaStream = stream; 
+
+    // === START VISUALIZER ===
+    startVisualizer(stream);
 
     mediaRecorder = new MediaRecorder(stream, {
       mimeType: "audio/webm;codecs=opus",
@@ -443,10 +550,7 @@ async function startRecordingAndStreaming(metadata) {
       }
     };
 
-    // === THE FIX ===
-    // 300ms is too small and sends fragments.
     // 5000ms (5s) ensures each blob is a valid, self-contained file
-    // that ffmpeg's concat protocol can understand.
     mediaRecorder.start(5000);
   } catch (err) {
     console.error("getUserMedia error:", err);
@@ -462,6 +566,9 @@ async function startRecordingAndStreaming(metadata) {
 }
 
 function stopRecording() {
+  // === STOP VISUALIZER ===
+  stopVisualizer();
+
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop();
   }

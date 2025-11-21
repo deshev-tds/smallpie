@@ -5,20 +5,16 @@
   <title>smallpie - a quiet meeting recorder</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Tailwind (built into /src/styles) -->
   <link rel="stylesheet" href="/src/styles/base.css" />
 
-  <!-- Favicon / basic meta -->
   <meta name="description" content="smallpie turns your meetings into clear, structured notes." />
 </head>
 <body class="min-h-screen bg-bgSoft dark:bg-darkBg text-textPrimary dark:text-darkText antialiased">
 
   <div class="min-h-screen flex flex-col">
-    <!-- HEADER -->
     <header class="w-full border-b border-bgSubtle dark:border-darkBgSoft bg-bgSoft/80 dark:bg-darkBg/80 backdrop-blur-sm">
       <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
-          <!-- Logo -->
           <div class="flex items-center justify-center w-10 h-10 rounded-full bg-bgSubtle dark:bg-darkBgSoft">
             <svg
               width="32"
@@ -62,11 +58,9 @@
       </div>
     </header>
 
-    <!-- MAIN CONTENT -->
     <main class="flex-1">
       <div class="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
 
-        <!-- HERO -->
         <section class="flex flex-col gap-3">
           <h1 class="text-2xl sm:text-3xl font-semibold text-forest dark:text-darkAccent tracking-tight">
             Turn your meetings into clear, structured notes and insights.
@@ -77,9 +71,7 @@
           </p>
         </section>
 
-        <!-- CARDS ROW -->
         <section class="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)] items-start">
-          <!-- LEFT: Recording card -->
           <div class="rounded-3xl border border-bgSubtle dark:border-darkBgSoft bg-white dark:bg-darkSurface shadow-sm p-5 flex flex-col gap-4">
             <div class="flex items-center justify-between gap-2">
               <div class="flex flex-col gap-0.5">
@@ -114,6 +106,9 @@
               <div id="record-timer" class="text-xs font-mono text-textMuted dark:text-darkMuted hidden">
                 00:00
               </div>
+              
+              <canvas id="audio-visualizer" width="60" height="20" class="hidden mt-1"></canvas>
+
               <div
                 id="record-error"
                 class="hidden text-xs text-rose-600 dark:text-rose-400 mt-1"
@@ -127,7 +122,6 @@
             </p>
           </div>
 
-          <!-- RIGHT: Upload card -->
           <div class="rounded-3xl border border-bgSubtle dark:border-darkBgSoft bg-white dark:bg-darkSurface shadow-sm p-5 flex flex-col gap-4">
             <div class="flex items-center justify-between gap-2">
               <div class="flex flex-col gap-0.5">
@@ -157,18 +151,15 @@
           </div>
         </section>
 
-        <!-- FLOW AREA (modal-ish) -->
         <div id="backdrop" class="fixed inset-0 bg-black/30 dark:bg-black/50 hidden z-10"></div>
         <div
           id="flow-container"
           class="fixed inset-x-0 bottom-0 z-20 flex justify-center pointer-events-none"
         >
-          <!-- Dynamic content from templates will be mounted here -->
-        </div>
+          </div>
       </div>
     </main>
 
-    <!-- FOOTER -->
     <footer class="border-t border-bgSubtle dark:border-darkBgSoft py-4 mt-4">
       <div class="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
         <p class="text-[11px] text-textMuted dark:text-darkMuted">
@@ -181,7 +172,6 @@
     </footer>
   </div>
 
-  <!-- FORM TEMPLATE -->
   <template id="tmpl-form-section">
     <div
       class="pointer-events-auto max-w-md w-full mx-4 mb-6 rounded-3xl border border-bgSubtle dark:border-darkBgSoft bg-white dark:bg-darkSurface shadow-lg p-5"
@@ -235,7 +225,6 @@
             />
           </div>
 
-          <!-- Email address for sending notes -->
           <div class="flex flex-col gap-1">
             <label for="meeting-email" class="text-xs font-medium text-textPrimary dark:text-darkText">
               Email address
@@ -272,7 +261,6 @@
     </div>
   </template>
 
-  <!-- FILE UPLOAD TEMPLATE -->
   <template id="tmpl-file-upload-section">
     <div
       class="pointer-events-auto max-w-md w-full mx-4 mb-6 rounded-3xl border border-bgSubtle dark:border-darkBgSoft bg-white dark:bg-darkSurface shadow-lg p-5"
@@ -323,7 +311,6 @@
     </div>
   </template>
 
-  <!-- STATUS TEMPLATE -->
   <template id="tmpl-status">
     <div id="status-card" style="opacity:1; transition: opacity 0.6s ease;" class="
       bg-white dark:bg-darkSurface
@@ -346,7 +333,6 @@
   </template>
 
   <script type="module" src="src/main.js"></script>
-  <!-- Status bubble (appears then fades out) -->
   <div id="status-bubble"
        style="
          position: fixed;
