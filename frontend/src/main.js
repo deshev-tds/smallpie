@@ -37,7 +37,8 @@ let droppedFile = null;
 // VISUALIZER STATE
 let audioContext = null;
 let analyser = null;
-let audioSource = null; // Global reference to prevent garbage collection
+let audioSource = null;
+let gainNode = null; // Added gain node for amplification
 let visualizerFrameId = null;
 
 // ------------------------------------------------
@@ -128,7 +129,6 @@ function setRecordingState(state) {
       recButton.classList.add("opacity-70", "cursor-not-allowed");
       recButton.disabled = true;
       recordHelper.textContent = "Sending the last audio chunks to smallpie.";
-      // Keep visualizer hidden or active? usually keep it hidden as mic is effectively off
       visualizerCanvas.classList.add("hidden");
       break;
 
@@ -203,65 +203,82 @@ async function startVisualizer(stream) {
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
   }
-  
-  // === CRITICAL FIX: Resume context if suspended (autoplay policy) ===
+
+  // Resume if suspended (browser autoplay policy)
   if (audioContext.state === "suspended") {
     await audioContext.resume();
   }
   
-  // 2. Create Source & Analyser
-  // Store source in a global var to prevent garbage collection breaking the graph
+  // 2. Build Graph: Source -> Gain -> Analyser
   audioSource = audioContext.createMediaStreamSource(stream);
-  analyser = audioContext.createAnalyser();
   
-  // Increase FFT size for better resolution in low frequencies (voice)
-  analyser.fftSize = 256; 
-  audioSource.connect(analyser);
+  // === FIX: AMPLIFY SIGNAL ===
+  // Microphone input is often very quiet (-40dB).
+  // We boost it by 5x specifically for the visualizer so bars actually move.
+  gainNode = audioContext.createGain();
+  gainNode.gain.value = 5.0; 
+  
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 64; // 32 bins
+  
+  audioSource.connect(gainNode);
+  gainNode.connect(analyser);
 
-  const bufferLength = analyser.frequencyBinCount; // 128
+  const bufferLength = analyser.frequencyBinCount;
   const dataArray = new Uint8Array(bufferLength);
   const ctx = visualizerCanvas.getContext("2d");
-
-  // Updated indices to map approximately to speech frequencies (200Hz - 6kHz)
-  // With sampleRate ~48kHz & fftSize 256, bin width is ~187Hz.
-  // [1]=187Hz, [3]=560Hz, [7]=1.3k, [15]=2.8k, [31]=5.8k
-  const indices = [1, 3, 7, 15, 31]; 
 
   const draw = () => {
     visualizerFrameId = requestAnimationFrame(draw);
 
-    // Get data
     analyser.getByteFrequencyData(dataArray);
-
-    // Clear
     ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+    ctx.fillStyle = "#e11d48"; // Rose color
 
-    // Style - match the "Rose" active color (#e11d48)
-    ctx.fillStyle = "#e11d48";
-
-    const bars = indices.length;
+    const bars = 5;
     const gap = 3;
     const totalWidth = visualizerCanvas.width;
     const barWidth = (totalWidth / bars) - gap;
     
-    indices.forEach((dataIndex, i) => {
-      const value = dataArray[dataIndex] || 0;
-      // Normalize 0-255 to 0.1 - 1.0 height scale
-      let percent = value / 255;
-      // Min height so bars are visible
-      if (percent < 0.1) percent = 0.1; 
+    // Calculate bins per bar
+    // We skip the first few bins (DC offset/rumble)
+    const startIndex = 1;
+    const usableBins = bufferLength - startIndex;
+    const step = Math.floor(usableBins / bars);
+
+    for (let i = 0; i < bars; i++) {
+      // Average the volume in this frequency chunk
+      // This is more robust than picking a single bin
+      let sum = 0;
+      let count = 0;
+      for (let j = 0; j < step; j++) {
+        const idx = startIndex + (i * step) + j;
+        if (idx < bufferLength) {
+          sum += dataArray[idx];
+          count++;
+        }
+      }
+      const avg = count > 0 ? sum / count : 0;
+
+      // === FIX: SCALING ===
+      // Linear 0-255 is too flat. We use a slight curve to boost low signals.
+      // (avg / 255) -> 0.1 is tiny. 
+      // New formula: Boost low values.
+      let percent = avg / 255;
+      
+      // Apply boost: simple multiplier + clamp
+      percent = percent * 1.5; 
+      if (percent > 1) percent = 1;
+      if (percent < 0.1) percent = 0.1; // Minimum pill height
 
       const barHeight = visualizerCanvas.height * percent;
-      
-      // Center vertically
       const x = i * (barWidth + gap) + gap/2;
       const y = (visualizerCanvas.height - barHeight) / 2;
 
-      // Draw rounded rect
       ctx.beginPath();
       ctx.roundRect(x, y, barWidth, barHeight, 4);
       ctx.fill();
-    });
+    }
   };
 
   draw();
@@ -273,22 +290,24 @@ function stopVisualizer() {
     visualizerFrameId = null;
   }
   
-  // Clear canvas
   const ctx = visualizerCanvas.getContext("2d");
   ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
 
-  // Cleanup graph
+  // Cleanup nodes
   if (audioSource) {
     audioSource.disconnect();
     audioSource = null;
   }
-  
+  if (gainNode) {
+    gainNode.disconnect();
+    gainNode = null;
+  }
   if (analyser) {
     analyser.disconnect();
     analyser = null;
   }
 
-  // Clean close of context
+  // Close context to stop processing
   if (audioContext && audioContext.state !== 'closed') {
      audioContext.close();
      audioContext = null;
