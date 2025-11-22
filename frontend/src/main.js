@@ -212,21 +212,34 @@ async function startVisualizer(stream) {
   // 2. Build Graph: Source -> Gain -> Analyser
   audioSource = audioContext.createMediaStreamSource(stream);
   
-  // === FIX: AMPLIFY SIGNAL ===
-  // Microphone input is often very quiet (-40dB).
-  // We boost it by 5x specifically for the visualizer so bars actually move.
+  // === FIX 1: Massive Gain Boost for Visuals ===
   gainNode = audioContext.createGain();
-  gainNode.gain.value = 10.0; 
+  gainNode.gain.value = 5.0; // 5x amplification for the eyes
   
   analyser = audioContext.createAnalyser();
-  analyser.fftSize = 64; // 32 bins
-  
+  // === FIX 2: Higher Resolution & Smoothing ===
+  // 256 size = 128 frequency bins. At 48kHz, ~187Hz per bin.
+  analyser.fftSize = 256; 
+  analyser.smoothingTimeConstant = 0.5; // Smoother movement
+  analyser.minDecibels = -85; // Lower floor to pick up quiet sounds
+  analyser.maxDecibels = -10;
+
   audioSource.connect(gainNode);
   gainNode.connect(analyser);
 
   const bufferLength = analyser.frequencyBinCount;
   const dataArray = new Uint8Array(bufferLength);
   const ctx = visualizerCanvas.getContext("2d");
+
+  // === FIX 3: Manual Frequency Targeting ===
+  // Instead of averaging empty high frequencies, we pick 5 bins
+  // that correspond to where human voice energy ACTUALLY is.
+  // Bin 0 (~0-180Hz) - Rumble/Fundamental
+  // Bin 2 (~375Hz)   - Low Mids (Voice Body)
+  // Bin 5 (~930Hz)   - Mids (Vowels)
+  // Bin 12 (~2.2kHz) - High Mids (Clarity)
+  // Bin 25 (~4.6kHz) - Presence (Consonants)
+  const targetBins = [1, 3, 6, 12, 25];
 
   const draw = () => {
     visualizerFrameId = requestAnimationFrame(draw);
@@ -235,41 +248,31 @@ async function startVisualizer(stream) {
     ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
     ctx.fillStyle = "#e11d48"; // Rose color
 
-    const bars = 5;
+    const bars = targetBins.length;
     const gap = 3;
     const totalWidth = visualizerCanvas.width;
     const barWidth = (totalWidth / bars) - gap;
     
-    // Calculate bins per bar
-    // We skip the first few bins (DC offset/rumble)
-    const startIndex = 1;
-    const usableBins = bufferLength - startIndex;
-    const step = Math.floor(usableBins / bars);
+    targetBins.forEach((binIndex, i) => {
+      // Get value for this specific frequency range
+      // We average the target bin and its neighbor for stability
+      const v1 = dataArray[binIndex] || 0;
+      const v2 = dataArray[binIndex + 1] || 0;
+      const avg = (v1 + v2) / 2;
 
-    for (let i = 0; i < bars; i++) {
-      // Average the volume in this frequency chunk
-      // This is more robust than picking a single bin
-      let sum = 0;
-      let count = 0;
-      for (let j = 0; j < step; j++) {
-        const idx = startIndex + (i * step) + j;
-        if (idx < bufferLength) {
-          sum += dataArray[idx];
-          count++;
-        }
-      }
-      const avg = count > 0 ? sum / count : 0;
-
-      // === FIX: SCALING ===
-      // Linear 0-255 is too flat. We use a slight curve to boost low signals.
-      // (avg / 255) -> 0.1 is tiny. 
-      // New formula: Boost low values.
+      // === FIX 4: Visual Sensitivity Curve ===
+      // Convert linear 0-255 to a visual percentage
       let percent = avg / 255;
       
-      // Apply boost: simple multiplier + clamp
-      percent = percent * 1.5; 
+      // Non-linear curve: square root boosts small values significantly
+      // e.g. 0.1 input becomes 0.3 output
+      if (percent > 0) {
+        percent = Math.sqrt(percent) * 1.2; 
+      }
+
+      // Clamping
       if (percent > 1) percent = 1;
-      if (percent < 0.1) percent = 0.1; // Minimum pill height
+      if (percent < 0.1) percent = 0.1; // Minimum "dash" height
 
       const barHeight = visualizerCanvas.height * percent;
       const x = i * (barWidth + gap) + gap/2;
@@ -278,7 +281,7 @@ async function startVisualizer(stream) {
       ctx.beginPath();
       ctx.roundRect(x, y, barWidth, barHeight, 4);
       ctx.fill();
-    }
+    });
   };
 
   draw();
