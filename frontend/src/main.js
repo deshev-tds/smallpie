@@ -38,7 +38,7 @@ let droppedFile = null;
 let audioContext = null;
 let analyser = null;
 let audioSource = null;
-let gainNode = null; // Added gain node for amplification
+let gainNode = null;
 let visualizerFrameId = null;
 
 // ------------------------------------------------
@@ -108,7 +108,7 @@ function setRecordingState(state) {
       recordLabel.textContent = "REC";
       recordHelper.textContent = "Tap REC to start listening.";
       recordTimerEl.classList.add("hidden");
-      visualizerCanvas.classList.add("hidden"); // Hide visualizer
+      visualizerCanvas.classList.add("hidden");
       stopRecordingTimer();
       break;
 
@@ -120,7 +120,7 @@ function setRecordingState(state) {
       recordLabel.textContent = "STOP";
       recordHelper.textContent = "Recording… tap STOP when you’re done.";
       recordTimerEl.classList.remove("hidden");
-      visualizerCanvas.classList.remove("hidden"); // Show visualizer
+      visualizerCanvas.classList.remove("hidden");
       startRecordingTimer();
       break;
 
@@ -159,18 +159,16 @@ function setRecordingState(state) {
 function fadeOutStatusCardAndFinish() {
   const card = document.getElementById("status-card");
   if (!card) {
-    // Fallback: just reset UI state
     setRecordingState("finished");
     return;
   }
 
-  // Държим REC disabled (state = "finishing"), докато картата fade-не.
   setTimeout(() => {
     card.style.opacity = "0";
     setTimeout(() => {
       card.remove();
       setRecordingState("finished");
-    }, 600); // match CSS transition duration
+    }, 600);
   }, 3000);
 }
 
@@ -198,48 +196,52 @@ function stopRecordingTimer() {
 // AUDIO VISUALIZER LOGIC
 // ------------------------------------------------
 
-async function startVisualizer(stream) {
-  // 1. Create AudioContext if not exists
+// Helper to ensure Context exists and is running (must call on user gesture)
+function ensureAudioContext() {
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
   }
-
-  // Resume if suspended (browser autoplay policy)
   if (audioContext.state === "suspended") {
-    await audioContext.resume();
+    // This returns a promise, but we fire it eagerly to capture the gesture
+    audioContext.resume().catch(e => console.error("AudioContext resume failed", e));
   }
+}
+
+async function startVisualizer(stream) {
+  ensureAudioContext();
   
+  // === FIX 1: Clone the stream ===
+  // This ensures the Visualizer and MediaRecorder don't fight over the same track state.
+  // Some browsers mute a source if it's being recorded elsewhere without cloning.
+  const visStream = stream.clone();
+
   // 2. Build Graph: Source -> Gain -> Analyser
-  audioSource = audioContext.createMediaStreamSource(stream);
+  audioSource = audioContext.createMediaStreamSource(visStream);
   
-  // === FIX 1: Massive Gain Boost for Visuals ===
+  // Boost gain for visibility
   gainNode = audioContext.createGain();
-  gainNode.gain.value = 5.0; // 5x amplification for the eyes
+  gainNode.gain.value = 10.0; // High sensitivity
   
   analyser = audioContext.createAnalyser();
-  // === FIX 2: Higher Resolution & Smoothing ===
-  // 256 size = 128 frequency bins. At 48kHz, ~187Hz per bin.
-  analyser.fftSize = 256; 
-  analyser.smoothingTimeConstant = 0.5; // Smoother movement
-  analyser.minDecibels = -85; // Lower floor to pick up quiet sounds
+  analyser.fftSize = 256; // 128 bins
+  analyser.smoothingTimeConstant = 0.5;
+  analyser.minDecibels = -90;
   analyser.maxDecibels = -10;
 
   audioSource.connect(gainNode);
   gainNode.connect(analyser);
 
-  const bufferLength = analyser.frequencyBinCount;
+  const bufferLength = analyser.frequencyBinCount; // 128
   const dataArray = new Uint8Array(bufferLength);
   const ctx = visualizerCanvas.getContext("2d");
 
-  // === FIX 3: Manual Frequency Targeting ===
-  // Instead of averaging empty high frequencies, we pick 5 bins
-  // that correspond to where human voice energy ACTUALLY is.
-  // Bin 0 (~0-180Hz) - Rumble/Fundamental
-  // Bin 2 (~375Hz)   - Low Mids (Voice Body)
-  // Bin 5 (~930Hz)   - Mids (Vowels)
-  // Bin 12 (~2.2kHz) - High Mids (Clarity)
-  // Bin 25 (~4.6kHz) - Presence (Consonants)
-  const targetBins = [1, 3, 6, 12, 25];
+  // === FIX 2: Dense Binning (Summation) ===
+  // Instead of picking specific indices, we calculate average energy
+  // across 5 distinct bands covering the vocal range (0Hz to ~4kHz).
+  // At 48kHz, 128 bins => ~187Hz per bin.
+  // Voice range is roughly bins 0 to 25.
+  const bars = 5;
+  const binsPerBar = 5; // 5 * 5 = 25 bins covered (~4.6kHz total width)
 
   const draw = () => {
     visualizerFrameId = requestAnimationFrame(draw);
@@ -248,31 +250,33 @@ async function startVisualizer(stream) {
     ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
     ctx.fillStyle = "#e11d48"; // Rose color
 
-    const bars = targetBins.length;
     const gap = 3;
     const totalWidth = visualizerCanvas.width;
     const barWidth = (totalWidth / bars) - gap;
     
-    targetBins.forEach((binIndex, i) => {
-      // Get value for this specific frequency range
-      // We average the target bin and its neighbor for stability
-      const v1 = dataArray[binIndex] || 0;
-      const v2 = dataArray[binIndex + 1] || 0;
-      const avg = (v1 + v2) / 2;
-
-      // === FIX 4: Visual Sensitivity Curve ===
-      // Convert linear 0-255 to a visual percentage
-      let percent = avg / 255;
-      
-      // Non-linear curve: square root boosts small values significantly
-      // e.g. 0.1 input becomes 0.3 output
-      if (percent > 0) {
-        percent = Math.sqrt(percent) * 1.2; 
+    for (let i = 0; i < bars; i++) {
+      let sum = 0;
+      // Sum up energy in this band
+      for (let j = 0; j < binsPerBar; j++) {
+        // Offset by 1 to skip DC offset
+        const binIndex = 1 + (i * binsPerBar) + j; 
+        if (binIndex < bufferLength) {
+          sum += dataArray[binIndex];
+        }
       }
+      // Average
+      const avg = sum / binsPerBar;
 
+      // Visual scaling
+      let percent = avg / 255;
+      if (percent > 0.02) {
+         // Non-linear boost for visibility
+         percent = Math.sqrt(percent) * 1.2;
+      }
+      
       // Clamping
       if (percent > 1) percent = 1;
-      if (percent < 0.1) percent = 0.1; // Minimum "dash" height
+      if (percent < 0.1) percent = 0.1; // Minimum pill height
 
       const barHeight = visualizerCanvas.height * percent;
       const x = i * (barWidth + gap) + gap/2;
@@ -281,7 +285,7 @@ async function startVisualizer(stream) {
       ctx.beginPath();
       ctx.roundRect(x, y, barWidth, barHeight, 4);
       ctx.fill();
-    });
+    }
   };
 
   draw();
@@ -296,7 +300,6 @@ function stopVisualizer() {
   const ctx = visualizerCanvas.getContext("2d");
   ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
 
-  // Cleanup nodes
   if (audioSource) {
     audioSource.disconnect();
     audioSource = null;
@@ -310,7 +313,9 @@ function stopVisualizer() {
     analyser = null;
   }
 
-  // Close context to stop processing
+  // We don't close audioContext here to allow re-use, 
+  // or we can close it if we ensure to create new one next time.
+  // Safer to close for cleanup in this specific flow.
   if (audioContext && audioContext.state !== 'closed') {
      audioContext.close();
      audioContext = null;
@@ -347,7 +352,12 @@ function wireDynamicHandlers() {
         return;
       }
 
-      // move to status screen & start recording
+      // === FIX 3: Synchronous AudioContext Resume ===
+      // We MUST trigger this here, synchronously, inside the event handler.
+      // If we wait until after 'await getUserMedia', the browser will
+      // block the audio context thinking it's an autoplay attempt.
+      ensureAudioContext();
+
       showScreen(tmplStatus, { showBackdropFlag: false });
       const statusText = document.getElementById("status-text");
       const statusSubtext = document.getElementById("status-subtext");
@@ -560,7 +570,7 @@ async function startRecordingAndStreaming(metadata) {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaStream = stream; 
 
-    // === START VISUALIZER (Async to allow context resume) ===
+    // === START VISUALIZER (Async) ===
     await startVisualizer(stream);
 
     mediaRecorder = new MediaRecorder(stream, {
