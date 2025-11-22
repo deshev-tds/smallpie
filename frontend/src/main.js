@@ -40,6 +40,7 @@ let analyser = null;
 let audioSource = null;
 let gainNode = null;
 let visualizerFrameId = null;
+let visualizerStream = null; // <-- ADDED: Track the cloned stream to release it later
 
 // ------------------------------------------------
 // FLOW UTILS
@@ -212,14 +213,14 @@ async function startVisualizer(stream) {
   
   // === FIX 1: Clone the stream ===
   // This ensures the Visualizer and MediaRecorder don't fight over the same track state.
-  const visStream = stream.clone();
+  visualizerStream = stream.clone(); // <-- Store in global var to close later
 
   // 2. Build Graph: Source -> Gain -> Analyser
-  audioSource = audioContext.createMediaStreamSource(visStream);
+  audioSource = audioContext.createMediaStreamSource(visualizerStream);
   
   // Boost gain for visibility
   gainNode = audioContext.createGain();
-  gainNode.gain.value = 12.0; // Increased gain (10.0 -> 12.0)
+  gainNode.gain.value = 7.0; // Increased gain (10.0 -> 12.0)
   
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 256; // 128 bins
@@ -308,6 +309,12 @@ function stopVisualizer() {
   if (analyser) {
     analyser.disconnect();
     analyser = null;
+  }
+
+  // === CRITICAL FIX: Stop the cloned tracks ===
+  if (visualizerStream) {
+    visualizerStream.getTracks().forEach(track => track.stop());
+    visualizerStream = null;
   }
 
   if (audioContext && audioContext.state !== 'closed') {
