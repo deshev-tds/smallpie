@@ -212,7 +212,6 @@ async function startVisualizer(stream) {
   
   // === FIX 1: Clone the stream ===
   // This ensures the Visualizer and MediaRecorder don't fight over the same track state.
-  // Some browsers mute a source if it's being recorded elsewhere without cloning.
   const visStream = stream.clone();
 
   // 2. Build Graph: Source -> Gain -> Analyser
@@ -220,7 +219,7 @@ async function startVisualizer(stream) {
   
   // Boost gain for visibility
   gainNode = audioContext.createGain();
-  gainNode.gain.value = 10.0; // High sensitivity
+  gainNode.gain.value = 12.0; // Increased gain (10.0 -> 12.0)
   
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 256; // 128 bins
@@ -238,8 +237,6 @@ async function startVisualizer(stream) {
   // === FIX 2: Dense Binning (Summation) ===
   // Instead of picking specific indices, we calculate average energy
   // across 5 distinct bands covering the vocal range (0Hz to ~4kHz).
-  // At 48kHz, 128 bins => ~187Hz per bin.
-  // Voice range is roughly bins 0 to 25.
   const bars = 5;
   const binsPerBar = 5; // 5 * 5 = 25 bins covered (~4.6kHz total width)
 
@@ -270,8 +267,8 @@ async function startVisualizer(stream) {
       // Visual scaling
       let percent = avg / 255;
       if (percent > 0.02) {
-         // Non-linear boost for visibility
-         percent = Math.sqrt(percent) * 1.2;
+         // Non-linear boost for visibility + increased multiplier (1.2 -> 1.6)
+         percent = Math.sqrt(percent) * 1.6;
       }
       
       // Clamping
@@ -313,9 +310,6 @@ function stopVisualizer() {
     analyser = null;
   }
 
-  // We don't close audioContext here to allow re-use, 
-  // or we can close it if we ensure to create new one next time.
-  // Safer to close for cleanup in this specific flow.
   if (audioContext && audioContext.state !== 'closed') {
      audioContext.close();
      audioContext = null;
@@ -352,10 +346,7 @@ function wireDynamicHandlers() {
         return;
       }
 
-      // === FIX 3: Synchronous AudioContext Resume ===
-      // We MUST trigger this here, synchronously, inside the event handler.
-      // If we wait until after 'await getUserMedia', the browser will
-      // block the audio context thinking it's an autoplay attempt.
+      // Synchronous Resume to capture user gesture
       ensureAudioContext();
 
       showScreen(tmplStatus, { showBackdropFlag: false });
