@@ -2,7 +2,7 @@ import "/src/styles/base.css";
 
 // API CONFIG
 // IMPORTANT: set API_TOKEN to the same value as SMALLPIE_ACCESS_TOKEN on the backend.
-const API_WS_URL = "wss://api.smallpie.fun/api/ws";
+const API_WS_URL = "wss://api.smallpie.fun/ws";
 const API_TOKEN = "Iuhfjkdskeqrrgyubhoijkbcvt7gyiuhkjbcvt7gyiuhkjbwr";
 
 // STATIC ELEMENTS
