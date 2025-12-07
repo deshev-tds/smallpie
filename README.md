@@ -15,6 +15,20 @@ The system currently has two main components:
 
 The backend with real-time transcription and acoustic diarization arrives in version 0.8.x.
 
+## Backend refactor (Dec 2025)
+
+`meeting_server.py` was split for readability and maintainability. Entry point remains `smallpie.backend.meeting_server:app`.
+
+- `config.py` — env/config constants, paths, whisper settings, OpenAI client, SMTP flags.
+- `auth.py` — bearer and WS token checks.
+- `audio.py` — ffprobe/ffmpeg helpers and whisper.cpp transcription.
+- `analysis.py` — GPT analysis + trait updater.
+- `storage.py` — save transcripts/analysis to disk.
+- `emailer.py` — SMTP sender (HTML + text).
+- `pipeline.py` — batch upload pipeline, live orchestrator, thread helpers.
+- `api.py` — FastAPI app + routes wiring pipelines.
+- `meeting_server.py` — thin facade for uvicorn/CLI, preserving old usage.
+
 
 ## Nov 16, 2025: v0.6.1 - Streaming Transcription Architecture
 
