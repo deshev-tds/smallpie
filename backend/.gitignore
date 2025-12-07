@@ -1,0 +1,13 @@
+# Generic Python ignores; keep source files tracked
+__pycache__/
+*.py[cod]
+*.so
+.Python
+env/
+venv/
+.venv/
+bin/
+lib/
+pyvenv.cfg
+pip-wheel-metadata/
+*.egg-info/
