@@ -43,6 +43,7 @@ app.add_middleware(
 async def issue_session_token(
     request: Request,
     authorization: str | None = Header(default=None),
+    bootstrap_header: str | None = Header(default=None, alias="x-bootstrap-token"),
     scope: str = Form(...),
     session_id: str | None = Form(default=None),
 ):
@@ -55,14 +56,20 @@ async def issue_session_token(
     if not config.BOOTSTRAP_SECRET:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Token issuer not configured")
 
-    if not authorization or not authorization.lower().startswith("bearer"):
+    auth_value = authorization or bootstrap_header
+
+    if not auth_value:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bootstrap token")
 
-    parts = authorization.split(None, 1)
-    if len(parts) < 2:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bootstrap token")
+    supplied = auth_value
+    if authorization:
+        if not authorization.lower().startswith("bearer"):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bootstrap token")
+        parts = authorization.split(None, 1)
+        if len(parts) < 2:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bootstrap token")
+        supplied = parts[1].strip()
 
-    supplied = parts[1].strip()
     if supplied != config.BOOTSTRAP_SECRET:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bootstrap token")
 
