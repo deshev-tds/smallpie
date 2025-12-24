@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 
 from . import config
 
@@ -17,3 +18,12 @@ def save_meeting_outputs(meeting_id: str, meeting_name: str, transcript: str, an
 
     print("[save] outputs written to", folder)
     return folder
+
+
+def cleanup_meeting_folder(folder: Path):
+    """Remove a meeting folder and its contents, ignoring missing folders."""
+    try:
+        shutil.rmtree(folder, ignore_errors=True)
+        print("[cleanup] removed meeting folder", folder)
+    except Exception as e:
+        print(f"[cleanup] failed to remove meeting folder {folder}: {e}")

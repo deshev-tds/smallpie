@@ -27,8 +27,6 @@ MEETINGS_DIR = BASE_DIR / "meetings"
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 MEETINGS_DIR.mkdir(parents=True, exist_ok=True)
 
-TRAITS_FILE = BASE_DIR / "damyan_traits.txt"
-
 # OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -64,7 +62,6 @@ __all__ = [
     "BASE_DIR",
     "AUDIO_DIR",
     "MEETINGS_DIR",
-    "TRAITS_FILE",
     "client",
     "SMTP_HOST",
     "SMTP_PORT",

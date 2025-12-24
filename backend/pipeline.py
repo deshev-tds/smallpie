@@ -9,10 +9,10 @@ from pathlib import Path
 from threading import Thread
 
 from . import config
-from .analysis import analyze_with_gpt, update_traits
+from .analysis import analyze_with_gpt
 from .audio import convert_to_wav, transcribe_wav_file
 from .emailer import send_analysis_via_email
-from .storage import save_meeting_outputs
+from .storage import save_meeting_outputs, cleanup_meeting_folder
 
 
 class ThreadSafeTranscript:
@@ -165,35 +165,39 @@ def full_meeting_pipeline(
 
     print(f"[pipeline-upload] starting full pipeline for meeting_id={meeting_id}")
 
+    folder: Path | None = None
     try:
-        wav_path = convert_to_wav(audio_path)
-    except subprocess.CalledProcessError as e:
-        print(
-            f"[pipeline-upload] FATAL: convert_to_wav failed for {audio_path}: {e.stderr.decode()}",
-            file=sys.stderr,
-        )
-        return
+        try:
+            wav_path = convert_to_wav(audio_path)
+        except subprocess.CalledProcessError as e:
+            print(
+                f"[pipeline-upload] FATAL: convert_to_wav failed for {audio_path}: {e.stderr.decode()}",
+                file=sys.stderr,
+            )
+            return
 
-    if not wav_path.exists() or wav_path.stat().st_size == 0:
-        print(f"[pipeline-upload] conversion failed for {audio_path}")
-        return
+        if not wav_path.exists() or wav_path.stat().st_size == 0:
+            print(f"[pipeline-upload] conversion failed for {audio_path}")
+            return
 
-    transcript = transcribe_wav_file(wav_path)
+        transcript = transcribe_wav_file(wav_path)
 
-    if not transcript.strip():
-        print(f"[pipeline-upload] empty transcript for {meeting_id}, aborting")
-        return
+        if not transcript.strip():
+            print(f"[pipeline-upload] empty transcript for {meeting_id}, aborting")
+            return
 
-    analysis = analyze_with_gpt(meeting_name, meeting_topic, participants, transcript)
-    folder = save_meeting_outputs(meeting_id, meeting_name, transcript, analysis)
-    update_traits(transcript, analysis)
+        analysis = analyze_with_gpt(meeting_name, meeting_topic, participants, transcript)
+        folder = save_meeting_outputs(meeting_id, meeting_name, transcript, analysis)
 
-    try:
-        send_analysis_via_email(user_email, meeting_name, meeting_id, folder)
-    except Exception as e:
-        print(f"[email] unexpected exception in full_meeting_pipeline for {meeting_id}: {e}", file=sys.stderr)
+        try:
+            send_analysis_via_email(user_email, meeting_name, meeting_id, folder)
+        except Exception as e:
+            print(f"[email] unexpected exception in full_meeting_pipeline for {meeting_id}: {e}", file=sys.stderr)
 
-    print(f"[pipeline-upload] meeting {meeting_id} complete, stored at {folder}")
+        print(f"[pipeline-upload] meeting {meeting_id} complete, stored at {folder}")
+    finally:
+        if folder:
+            cleanup_meeting_folder(folder)
 
 
 def live_transcription_orchestrator(
@@ -209,6 +213,7 @@ def live_transcription_orchestrator(
     """
     Background thread for a live session.
     """
+    folder: Path | None = None
     chunk_index = 0
     processing_threads: list[threading.Thread] = []
 
@@ -294,7 +299,6 @@ def live_transcription_orchestrator(
 
         analysis = analyze_with_gpt(meeting_name, meeting_topic, participants, transcript)
         folder = save_meeting_outputs(meeting_id, meeting_name, transcript, analysis)
-        update_traits(transcript, analysis)
 
         try:
             send_analysis_via_email(user_email, meeting_name, meeting_id, folder)
@@ -308,7 +312,9 @@ def live_transcription_orchestrator(
         try:
             transcript = transcript_store.get_full_transcript()
             if transcript:
-                save_meeting_outputs(meeting_id, f"FAILED_{meeting_name}", transcript, f"ANALYSIS FAILED:\n{e}")
+                folder = save_meeting_outputs(
+                    meeting_id, f"FAILED_{meeting_name}", transcript, f"ANALYSIS FAILED:\n{e}"
+                )
         except Exception as save_e:
             print(f"[orchestrator] failed to save error state: {save_e}", file=sys.stderr)
     finally:
@@ -318,6 +324,8 @@ def live_transcription_orchestrator(
                 part_path.unlink()
             except FileNotFoundError:
                 pass
+        if folder:
+            cleanup_meeting_folder(folder)
 
 
 def start_full_pipeline_in_thread(
