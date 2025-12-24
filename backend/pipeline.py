@@ -8,11 +8,18 @@ import time
 from pathlib import Path
 from threading import Thread
 
-from . import config
-from .analysis import analyze_with_gpt
-from .audio import convert_to_wav, transcribe_wav_file
-from .emailer import send_analysis_via_email
-from .storage import save_meeting_outputs, cleanup_meeting_folder
+try:
+    from . import config  # type: ignore
+    from .analysis import analyze_with_gpt  # type: ignore
+    from .audio import convert_to_wav, transcribe_wav_file  # type: ignore
+    from .emailer import send_analysis_via_email  # type: ignore
+    from .storage import save_meeting_outputs, cleanup_meeting_folder  # type: ignore
+except ImportError:
+    import config  # type: ignore
+    from analysis import analyze_with_gpt  # type: ignore
+    from audio import convert_to_wav, transcribe_wav_file  # type: ignore
+    from emailer import send_analysis_via_email  # type: ignore
+    from storage import save_meeting_outputs, cleanup_meeting_folder  # type: ignore
 
 
 class ThreadSafeTranscript:

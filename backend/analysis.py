@@ -1,5 +1,9 @@
-from . import config
-from .utils import rand_delay
+try:
+    from . import config  # type: ignore
+    from .utils import rand_delay  # type: ignore
+except ImportError:
+    import config  # type: ignore
+    from utils import rand_delay  # type: ignore
 
 
 def analyze_with_gpt(meeting_name: str, meeting_topic: str, participants: str, transcript: str) -> str:

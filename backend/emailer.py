@@ -3,7 +3,10 @@ from email.message import EmailMessage
 
 import smtplib
 
-from . import config
+try:
+    from . import config  # type: ignore
+except ImportError:
+    import config  # type: ignore
 
 
 def send_analysis_via_email(

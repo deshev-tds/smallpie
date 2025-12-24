@@ -3,7 +3,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import config
+try:
+    from . import config  # type: ignore
+except ImportError:
+    import config  # type: ignore
 
 
 def run_ffprobe_duration(path: Path) -> float:

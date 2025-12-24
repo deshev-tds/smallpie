@@ -1,7 +1,10 @@
 from pathlib import Path
 import shutil
 
-from . import config
+try:
+    from . import config  # type: ignore
+except ImportError:
+    import config  # type: ignore
 
 
 def save_meeting_outputs(meeting_id: str, meeting_name: str, transcript: str, analysis: str) -> Path:

@@ -9,13 +9,22 @@ from fastapi import FastAPI, File, Form, Header, UploadFile, WebSocket, WebSocke
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import config
-from .auth import verify_bearer_token, verify_ws_token
-from .pipeline import (
-    ThreadSafeTranscript,
-    live_transcription_orchestrator,
-    start_full_pipeline_in_thread,
-)
+try:
+    from . import config  # type: ignore
+    from .auth import verify_bearer_token, verify_ws_token  # type: ignore
+    from .pipeline import (  # type: ignore
+        ThreadSafeTranscript,
+        live_transcription_orchestrator,
+        start_full_pipeline_in_thread,
+    )
+except ImportError:
+    import config  # type: ignore
+    from auth import verify_bearer_token, verify_ws_token  # type: ignore
+    from pipeline import (  # type: ignore
+        ThreadSafeTranscript,
+        live_transcription_orchestrator,
+        start_full_pipeline_in_thread,
+    )
 
 app = FastAPI(title="smallpie backend", version="0.5.0")
 

@@ -1,6 +1,9 @@
 from fastapi import HTTPException
 
-from . import config
+try:
+    from . import config  # type: ignore
+except ImportError:
+    import config  # type: ignore
 
 
 def verify_bearer_token(authorization: str | None):
