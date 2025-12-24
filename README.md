@@ -79,26 +79,10 @@ How to use:
 - Prevented whisper.cpp from receiving zero-length WAV files.
 - Resolved issues where nginx basic auth could break WebSocket upgrade requests.
 
-## WebSocket Access Token Added
+## WebSocket Access Token (superseded by per-session tokens)
 
-The `/ws` endpoint is intentionally **not protected by nginx basic auth**,
-because it would break the WebSocket upgrade handshake.
-
-Instead, the backend uses a simple **internal WebSocket token** to prevent
-unauthorized clients from opening a streaming session.
-
-### How it works
-
-The frontend must provide a query parameter:
-
-    wss://{$URL}/ws?token="$API_TOKEN"
-
-The backend validates this token via:
-
-- an environment variable (`SMALLPIE_WS_TOKEN`), or  
-- a local config value (depending on deployment)
-
-If the token does not match, the server immediately closes the connection with 403. 
+- `/ws` remains basic-auth-free for upgrades, but access is now gated by the per-session tokens issued via `/api/token` (see above).
+- No static token or `SMALLPIE_WS_TOKEN` is used anymore; tokens are one-shot, short-lived, and tied to a session.
 
 ------------------------------------------------------------
 ## Limitations in v0.6
