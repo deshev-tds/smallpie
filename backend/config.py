@@ -61,7 +61,11 @@ else:
     print("[auth] Bearer token auth DISABLED (SMALLPIE_ACCESS_TOKEN not set)")
 
 # CORS
-ALLOW_ORIGINS = ["*"]  # preserved for MVP
+# CORS
+ALLOW_ORIGINS = [
+    "https://smallpie.fun",
+    "https://www.smallpie.fun",
+]  # explicit origins to avoid duplicate CORS headers
 
 __all__ = [
     "WHISPER_CLI",
