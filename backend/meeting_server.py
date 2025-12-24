@@ -6,16 +6,21 @@ The real implementation now lives in smaller modules.
 import sys
 from pathlib import Path
 
-if __package__ is None or __package__ == "":
-    # Allow running as a script from repo root.
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
-    from smallpie.backend import config  # type: ignore
-    from smallpie.backend.api import app  # type: ignore
-    from smallpie.backend.pipeline import full_meeting_pipeline  # type: ignore
-else:
-    from . import config
-    from .api import app
-    from .pipeline import full_meeting_pipeline
+# Ensure backend directory is on sys.path for CLI usage
+backend_root = Path(__file__).resolve().parent
+if str(backend_root) not in sys.path:
+    sys.path.insert(0, str(backend_root))
+
+try:
+    # Imported as a package module, e.g. backend.meeting_server
+    from . import config  # type: ignore
+    from .api import app  # type: ignore
+    from .pipeline import full_meeting_pipeline  # type: ignore
+except ImportError:
+    # Run as a plain script: python meeting_server.py ...
+    import config  # type: ignore
+    from api import app  # type: ignore
+    from pipeline import full_meeting_pipeline  # type: ignore
 
 
 def cli_main():
