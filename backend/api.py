@@ -55,10 +55,14 @@ async def issue_session_token(
     if not config.BOOTSTRAP_SECRET:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Token issuer not configured")
 
-    if not authorization or not authorization.lower().startswith("bearer "):
+    if not authorization or not authorization.lower().startswith("bearer"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bootstrap token")
 
-    supplied = authorization.split(None, 1)[1].strip()
+    parts = authorization.split(None, 1)
+    if len(parts) < 2:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bootstrap token")
+
+    supplied = parts[1].strip()
     if supplied != config.BOOTSTRAP_SECRET:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bootstrap token")
 
