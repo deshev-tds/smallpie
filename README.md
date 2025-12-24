@@ -15,6 +15,29 @@ The system currently has two main components:
 
 The backend with real-time transcription and acoustic diarization arrives in version 0.8.x.
 
+## Frontend <-> Backend auth (Dec 2025): addressing the biggest security problem so far - the static frontend->backend bearer token. 
+
+Replaced the single static API token with per-session tokens issued on demand via the new /api/token endpont, signed with a backend key and scoped to WS/upload. The frontend fetches a fresh token each time you start recording, and the backend revokes it when the session ends or it expires. Old tokens are rejected, so access is time-bound and event-driven instead of permanently tied to one shared secret.
+
+How to use: 
+
+- Set these backend env vars (systemd unit or shell):
+  - `SMALLPIE_SIGNING_KEY` (64-hex HMAC signing key)
+  - `SMALLPIE_BOOTSTRAP_SECRET` (shared secret for issuing short-lived session tokens)
+  - `SMALLPIE_ACCESS_TOKEN` (optional legacy fallback; set to any value if you still want the old static token path; unset to force new tokens)
+- Frontend build expects:
+  - `VITE_API_HTTP_BASE` (e.g., https://api.smallpie.fun)
+  - `VITE_API_WS_URL` (e.g., wss://api.smallpie.fun/ws)
+  - `VITE_API_BOOTSTRAP_SECRET` (same as `SMALLPIE_BOOTSTRAP_SECRET`, provided via build-time env or runtime global; do not commit secrets)
+- Flow:
+  1) Frontend calls `/api/token` with `Authorization: Bearer <SMALLPIE_BOOTSTRAP_SECRET>` to get a scoped, short-lived token.
+  2) That token is used on `/ws` (query param) and on uploads (Bearer).
+  3) Tokens are per-session and revoked on STOP; old tokens are rejected.
+- nginx:
+  - `/api/token` is not behind basic auth and simply proxies to FastAPI (let FastAPI handle CORS).
+  - `/ws` stays basic-auth-free for WebSocket upgrades.
+
+
 ## Backend refactor (Dec 2025)
 
 `meeting_server.py` was split for readability and maintainability. Entry point remains `smallpie.backend.meeting_server:app`.
@@ -160,24 +183,6 @@ Requires:
 - OpenAI API key
 
 ------------------------------------------------------------
-
-## Frontend <-> Backend auth (new)
-
-- Set these backend env vars (systemd unit or shell):
-  - `SMALLPIE_SIGNING_KEY` (64-hex HMAC signing key)
-  - `SMALLPIE_BOOTSTRAP_SECRET` (shared secret for issuing short-lived session tokens)
-  - `SMALLPIE_ACCESS_TOKEN` (optional legacy fallback; set to any value if you still want the old static token path; unset to force new tokens)
-- Frontend build expects:
-  - `VITE_API_HTTP_BASE` (e.g., https://api.smallpie.fun)
-  - `VITE_API_WS_URL` (e.g., wss://api.smallpie.fun/ws)
-  - `VITE_API_BOOTSTRAP_SECRET` (same as `SMALLPIE_BOOTSTRAP_SECRET`, provided via build-time env or runtime global; do not commit secrets)
-- Flow:
-  1) Frontend calls `/api/token` with `Authorization: Bearer <SMALLPIE_BOOTSTRAP_SECRET>` to get a scoped, short-lived token.
-  2) That token is used on `/ws` (query param) and on uploads (Bearer).
-  3) Tokens are per-session and revoked on STOP; old tokens are rejected.
-- nginx:
-  - `/api/token` is not behind basic auth and simply proxies to FastAPI (let FastAPI handle CORS).
-  - `/ws` stays basic-auth-free for WebSocket upgrades.
 
 ## Roadmap
 
