@@ -77,7 +77,7 @@ async def upload_meeting_file(
     file: UploadFile = File(...),
     user_email: str | None = Form(default=None),
     authorization: str | None = Header(default=None),
-    request: Request | None = None,
+    request: Request,
 ):
     client_host = request.client.host if request and request.client else "unknown"
     authed = False
