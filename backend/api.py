@@ -17,7 +17,7 @@ try:
         live_transcription_orchestrator,
         start_full_pipeline_in_thread,
     )
-    from .tokens import issue_token, validate_token, revoke_session  # type: ignore
+    from .tokens import issue_token, validate_token, revoke_session, revoke_token_by_jti  # type: ignore
 except ImportError:
     import config  # type: ignore
     from auth import verify_bearer_token, verify_ws_token  # type: ignore
@@ -26,7 +26,7 @@ except ImportError:
         live_transcription_orchestrator,
         start_full_pipeline_in_thread,
     )
-    from tokens import issue_token, validate_token, revoke_session  # type: ignore
+    from tokens import issue_token, validate_token, revoke_session, revoke_token_by_jti  # type: ignore
 
 app = FastAPI(title="smallpie backend", version="0.5.0")
 
@@ -92,6 +92,7 @@ async def upload_meeting_file(
         try:
             token_payload = validate_token(token_value, "upload", client_host)
             authed = True
+            revoke_token_by_jti(token_payload.get("jti", ""))
         except HTTPException:
             authed = False
 
@@ -137,6 +138,8 @@ async def websocket_record(websocket: WebSocket):
     if ws_token:
         try:
             token_payload = validate_token(ws_token, "ws", client_host)
+            # One-shot: consume the token so it cannot be reused
+            revoke_token_by_jti(token_payload.get("jti", ""))
         except HTTPException:
             token_payload = None
 

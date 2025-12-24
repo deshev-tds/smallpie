@@ -1,12 +1,9 @@
 import "/src/styles/base.css";
 
 // API CONFIG
-// IMPORTANT: set API_BOOTSTRAP_SECRET to the same value as SMALLPIE_BOOTSTRAP_SECRET on the backend.
-// Pulled from build-time env (Vite) or a runtime global to avoid hardcoding secrets.
+// Pulled from build-time env (Vite) or runtime config; no secrets bundled.
 const API_HTTP_BASE = import.meta.env.VITE_API_HTTP_BASE || "https://api.smallpie.fun";
 const API_WS_URL = import.meta.env.VITE_API_WS_URL || "wss://api.smallpie.fun/ws";
-const API_BOOTSTRAP_SECRET =
-  import.meta.env.VITE_API_BOOTSTRAP_SECRET || (typeof window !== "undefined" ? window.__SMALLPIE_BOOTSTRAP_SECRET : "");
 
 async function fetchSessionToken(scope = "ws") {
   const formData = new FormData();
@@ -14,9 +11,6 @@ async function fetchSessionToken(scope = "ws") {
 
   const res = await fetch(`${API_HTTP_BASE}/api/token`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${API_BOOTSTRAP_SECRET}`
-    },
     body: formData
   });
 
