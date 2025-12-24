@@ -5,7 +5,7 @@ import uuid
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Header, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, Header, UploadFile, WebSocket, WebSocketDisconnect, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -17,6 +17,7 @@ try:
         live_transcription_orchestrator,
         start_full_pipeline_in_thread,
     )
+    from .tokens import issue_token, validate_token, revoke_session  # type: ignore
 except ImportError:
     import config  # type: ignore
     from auth import verify_bearer_token, verify_ws_token  # type: ignore
@@ -25,6 +26,7 @@ except ImportError:
         live_transcription_orchestrator,
         start_full_pipeline_in_thread,
     )
+    from tokens import issue_token, validate_token, revoke_session  # type: ignore
 
 app = FastAPI(title="smallpie backend", version="0.5.0")
 
@@ -37,6 +39,36 @@ app.add_middleware(
 )
 
 
+@app.post("/api/token")
+async def issue_session_token(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    scope: str = Form(...),
+    session_id: str | None = Form(default=None),
+):
+    """
+    Issues a short-lived, scoped session token.
+    Protected by a simple bootstrap secret + rate limiting.
+    """
+    client_id = request.client.host if request.client else "unknown"
+
+    if not config.BOOTSTRAP_SECRET:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Token issuer not configured")
+
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bootstrap token")
+
+    supplied = authorization.split(None, 1)[1].strip()
+    if supplied != config.BOOTSTRAP_SECRET:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bootstrap token")
+
+    if scope not in {"ws", "upload"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid scope")
+
+    issued = issue_token(scope, session_id, client_id)
+    return JSONResponse(issued)
+
+
 @app.post("/api/meetings/upload")
 async def upload_meeting_file(
     meeting_name: str = Form(...),
@@ -45,10 +77,26 @@ async def upload_meeting_file(
     file: UploadFile = File(...),
     user_email: str | None = Form(default=None),
     authorization: str | None = Header(default=None),
+    request: Request | None = None,
 ):
-    verify_bearer_token(authorization)
+    client_host = request.client.host if request and request.client else "unknown"
+    authed = False
+    token_payload = None
 
-    meeting_id = uuid.uuid4().hex
+    if authorization and authorization.lower().startswith("bearer "):
+        token_value = authorization.split(None, 1)[1].strip()
+        try:
+            token_payload = validate_token(token_value, "upload", client_host)
+            authed = True
+        except HTTPException:
+            authed = False
+
+    if not authed:
+        # Fallback to legacy static token auth
+        verify_bearer_token(authorization)
+        authed = True
+
+    meeting_id = token_payload["session_id"] if token_payload else uuid.uuid4().hex
     original_suffix = Path(file.filename or "upload").suffix or ".bin"
     raw_path = config.AUDIO_DIR / f"{meeting_id}{original_suffix}"
 
@@ -63,6 +111,9 @@ async def upload_meeting_file(
 
     start_full_pipeline_in_thread(raw_path, meeting_name, meeting_topic, participants, meeting_id, user_email=user_email)
 
+    if token_payload:
+        revoke_session(token_payload["session_id"])
+
     return JSONResponse(
         {
             "status": "accepted",
@@ -76,9 +127,20 @@ async def upload_meeting_file(
 async def websocket_record(websocket: WebSocket):
     qp = websocket.query_params
     ws_token = qp.get("token")
-    if not verify_ws_token(ws_token):
-        await websocket.close(code=1008)
-        return
+    client_host = websocket.client.host if websocket.client else "unknown"
+    token_payload = None
+
+    if ws_token:
+        try:
+            token_payload = validate_token(ws_token, "ws", client_host)
+        except HTTPException:
+            token_payload = None
+
+    if token_payload is None:
+        # Fallback to legacy static token
+        if not verify_ws_token(ws_token):
+            await websocket.close(code=1008)
+            return
 
     await websocket.accept()
 
@@ -86,7 +148,7 @@ async def websocket_record(websocket: WebSocket):
     meeting_topic = qp.get("meeting_topic", "Not specified")
     participants = qp.get("participants", "Not specified")
     user_email = qp.get("user_email")
-    meeting_id = uuid.uuid4().hex
+    meeting_id = token_payload["session_id"] if token_payload else uuid.uuid4().hex
 
     print(f"[ws] new recording session meeting_id={meeting_id}")
 
@@ -174,6 +236,8 @@ async def websocket_record(websocket: WebSocket):
     except Exception as e:
         print(f"[ws] error while receiving audio: {e}", file=sys.stderr)
     finally:
+        if token_payload:
+            revoke_session(token_payload["session_id"])
         print(f"[ws] client disconnected, signaling orchestrator to stop")
         recording_stopped.set()
 

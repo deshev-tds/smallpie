@@ -1,9 +1,33 @@
 import "/src/styles/base.css";
 
 // API CONFIG
-// IMPORTANT: set API_TOKEN to the same value as SMALLPIE_ACCESS_TOKEN on the backend.
+// IMPORTANT: set API_BOOTSTRAP_SECRET to the same value as SMALLPIE_BOOTSTRAP_SECRET on the backend.
+const API_HTTP_BASE = "https://api.smallpie.fun";
 const API_WS_URL = "wss://api.smallpie.fun/ws";
-const API_TOKEN = "Iuhfjkdskeqrrgyubhoijkbcvt7gyiuhkjbwr";
+const API_BOOTSTRAP_SECRET = "REPLACE_ME_BOOTSTRAP_SECRET";
+
+async function fetchSessionToken(scope = "ws") {
+  const formData = new FormData();
+  formData.append("scope", scope);
+
+  const res = await fetch(`${API_HTTP_BASE}/api/token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${API_BOOTSTRAP_SECRET}`
+    },
+    body: formData
+  });
+
+  if (!res.ok) {
+    throw new Error(`Token request failed (${res.status})`);
+  }
+
+  const data = await res.json();
+  if (!data.token) {
+    throw new Error("Token response missing token");
+  }
+  return data;
+}
 
 // STATIC ELEMENTS
 const recButton = document.getElementById("start-recording");
@@ -446,7 +470,7 @@ function wireDynamicHandlers() {
       if (statusText) statusText.innerText = "Uploading file…";
       if (statusSubtext) statusSubtext.innerText = "We’re analysing your audio and generating notes.";
 
-      // TODO: hook real upload logic here (with Authorization: Bearer API_TOKEN)
+      // TODO: hook real upload logic here (fetch token via fetchSessionToken('upload') and call /api/meetings/upload)
       // For now just simulate:
       setTimeout(() => {
         if (statusText) statusText.innerText = "Processing finished.";
@@ -501,14 +525,22 @@ async function startRecordingAndStreaming(metadata) {
   recordErrorEl.classList.add("hidden");
   droppedFile = null; // irrelevant here
 
+  const tokenResponse = await fetchSessionToken("ws");
+
   // Attach token as query param
-  const wsUrl = `${API_WS_URL}?token=${encodeURIComponent(API_TOKEN)}`;
+  const wsUrl = `${API_WS_URL}?token=${encodeURIComponent(tokenResponse.token)}`;
   ws = new WebSocket(wsUrl);
   ws.binaryType = "arraybuffer";
 
   ws.onopen = () => {
     console.log("WS connected");
-    ws.send(JSON.stringify({ type: "metadata", ...metadata }));
+    ws.send(
+      JSON.stringify({
+        type: "metadata",
+        session_id: tokenResponse.session_id,
+        ...metadata,
+      })
+    );
 
     const statusText = document.getElementById("status-text");
     const statusSubtext = document.getElementById("status-subtext");

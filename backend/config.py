@@ -7,6 +7,7 @@ import os
 import random
 import threading
 from pathlib import Path
+import secrets
 
 from openai import OpenAI
 
@@ -19,6 +20,15 @@ CHUNK_SECONDS = 60
 WHISPER_THREADS = 6
 WHISPER_SEMAPHORE = threading.Semaphore(1)
 print(f"[config] Whisper concurrency limit set to 1 (using {WHISPER_THREADS} threads per job)")
+
+# Auth / token signing
+SIGNING_KEY = os.getenv("SMALLPIE_SIGNING_KEY", "").strip() or secrets.token_hex(32)
+BOOTSTRAP_SECRET = os.getenv("SMALLPIE_BOOTSTRAP_SECRET", "").strip()
+TOKEN_TTL_SECONDS = int(os.getenv("SMALLPIE_TOKEN_TTL_SECONDS", "600"))
+TOKEN_ISSUE_LIMIT = int(os.getenv("SMALLPIE_TOKEN_ISSUE_LIMIT", "30"))  # per window
+TOKEN_ISSUE_WINDOW_SECONDS = int(os.getenv("SMALLPIE_TOKEN_ISSUE_WINDOW_SECONDS", "300"))
+TOKEN_VERIFY_LIMIT = int(os.getenv("SMALLPIE_TOKEN_VERIFY_LIMIT", "120"))  # per window
+TOKEN_VERIFY_WINDOW_SECONDS = int(os.getenv("SMALLPIE_TOKEN_VERIFY_WINDOW_SECONDS", "300"))
 
 # Storage layout
 BASE_DIR = Path("/root/smallpie-data").resolve()
@@ -59,6 +69,13 @@ __all__ = [
     "CHUNK_SECONDS",
     "WHISPER_THREADS",
     "WHISPER_SEMAPHORE",
+    "SIGNING_KEY",
+    "BOOTSTRAP_SECRET",
+    "TOKEN_TTL_SECONDS",
+    "TOKEN_ISSUE_LIMIT",
+    "TOKEN_ISSUE_WINDOW_SECONDS",
+    "TOKEN_VERIFY_LIMIT",
+    "TOKEN_VERIFY_WINDOW_SECONDS",
     "BASE_DIR",
     "AUDIO_DIR",
     "MEETINGS_DIR",
