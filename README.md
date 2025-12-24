@@ -26,8 +26,8 @@ How to use:
   - `SMALLPIE_BOOTSTRAP_SECRET` (shared secret for issuing short-lived session tokens)
   - `SMALLPIE_ACCESS_TOKEN` (optional legacy fallback; set to any value if you still want the old static token path; unset to force new tokens)
 - Frontend build expects:
-  - `VITE_API_HTTP_BASE` (e.g., https://api.smallpie.fun)
-  - `VITE_API_WS_URL` (e.g., wss://api.smallpie.fun/ws)
+  - `VITE_API_HTTP_BASE` 
+  - `VITE_API_WS_URL`
   - `VITE_API_BOOTSTRAP_SECRET` (same as `SMALLPIE_BOOTSTRAP_SECRET`, provided via build-time env or runtime global; do not commit secrets)
 - Flow:
   1) Frontend calls `/api/token` with `Authorization: Bearer <SMALLPIE_BOOTSTRAP_SECRET>` to get a scoped, short-lived token.
@@ -91,7 +91,7 @@ unauthorized clients from opening a streaming session.
 
 The frontend must provide a query parameter:
 
-    wss://api.smallpie.fun/ws?token="$API_TOKEN"
+    wss://{$URL}/ws?token="$API_TOKEN"
 
 The backend validates this token via:
 
