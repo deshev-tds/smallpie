@@ -71,13 +71,13 @@ async def issue_session_token(
 
 @app.post("/api/meetings/upload")
 async def upload_meeting_file(
+    request: Request,
     meeting_name: str = Form(...),
     meeting_topic: str = Form(...),
     participants: str = Form(...),
     file: UploadFile = File(...),
     user_email: str | None = Form(default=None),
     authorization: str | None = Header(default=None),
-    request: Request,
 ):
     client_host = request.client.host if request and request.client else "unknown"
     authed = False
