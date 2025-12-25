@@ -1,209 +1,150 @@
 # smallpie
-Meeting intelligence, but cute :3
+**Meeting intelligence, but cute :3**
 
-Version 0.6.1 (frontend + local Python pipeline)
+**Version:** 0.6.2 (Frontend + Local Python Pipeline)
 
-smallpie is a tiny, browser-based (explicity mobile-friendly), tasty, portable prototype that turns meetings (ones that it can listen to from your phone, 
-computer, raspberry, your grandma's laptop...) into structured transcripts, analysis, and actionable items sent to your email minutes after the meeting ends.
+smallpie is a tiny, browser-based (explicitly mobile-friendly), tasty, portable prototype that turns meetings (ones that it can listen to from your phone, computer, raspberry, your grandma's laptop...) into structured transcripts, analysis, and actionable items sent to your email minutes after the meeting ends.
 
-No data is being kept long-terms, each session data is flushed after the final email is sent to the user. smallpie doesn't need your data for "improving the product quality" or to "keep in touch with the latest promotions". 
+It runs anywhere where a modern browser and a mic exist. To be tested on a fridge soon.
 
+---
+
+## Privacy & Philosophy
+**Your data is yours.**
+* **Ephemeral:** No data is being kept long-term. Each session data is flushed after the final email is sent to the user.
+* **No Tracking:** smallpie doesn't need your data for improving the product quality, to keep in touch with the latest promotions, or to train future models. 
+* **Vision:** Friendly, minimal, fast, actually useful for a change, private.
+
+---
+
+## System Architecture
 The system currently has two main components:
 
-- Frontend (Vite + Tailwind, mobile-friendly, but runs anywhere where a modern browser and a mic exists - to be tested on a fridge soon)
-- Python pipeline (local Whisper.cpp + semantic diarization + LLM analysis)
+1.  **Frontend:** Vite + Tailwind. Features a custom FFT audio visualizer (client-side) to ensure your mic is actually working during recording.
+2.  **Python Pipeline:** Local Whisper.cpp + FFMPEG chunking + "Diarization Consolidation Layer" (LLM-based) + Analysis.
 
-The backend with real-time transcription and acoustic diarization arrives in version 0.8.x.
+*Note: The backend with real-time transcription and acoustic diarization arrives in version 0.8.x.*
 
-## Frontend <-> Backend auth (Dec 2025): addressing the biggest security problem so far - the static frontend->backend bearer token. 
+### Backend Structure (Refactored Dec 2025)
+The initial `meeting_server.py` monolith was split for readability. Entry point: `smallpie.backend.meeting_server:app`
 
-Replaced the single static API token with per-session tokens issued on demand via the new /api/token endpoint, signed with a backend key and scoped to WS/upload. The frontend fetches a fresh token each time you start recording, and the backend revokes it when the session ends or it expires. Old tokens are rejected, so access is time-bound and event-driven instead of permanently tied to one shared secret.
+* `pipeline.py`: Batch upload pipeline, live orchestrator, thread helpers.
+* `audio.py`: ffprobe/ffmpeg helpers and whisper.cpp transcription.
+* `analysis.py`: GPT analysis with a specialized prompt for fixing broken speaker segments.
+* `auth.py`: Bearer and WS token checks.
+* `config.py`: Env/config constants, paths, whisper settings, SMTP flags.
+* `api.py`: FastAPI app + routes wiring pipelines.
+* `emailer.py`: SMTP sender (HTML + text).
 
-How to use: 
+---
 
-- Backend env:
-  - `SMALLPIE_SIGNING_KEY` (64-hex HMAC signing key)
-  - `SMALLPIE_BOOTSTRAP_SECRET` (shared secret for issuing short-lived session tokens; never shipped to the browser)
-  - `SMALLPIE_ACCESS_TOKEN` (optional legacy fallback; set to any value if you still want the old static token path; unset to force new tokens)
-- Frontend build:
-  - `VITE_API_HTTP_BASE`
-  - `VITE_API_WS_URL`
-  - No bootstrap secret is bundled; the frontend calls `/api/token` same-origin with no headers.
-- Flow:
-  1) nginx proxies `/api/token` to the backend and injects `Authorization: Bearer <SMALLPIE_BOOTSTRAP_SECRET>` server-side.
-  2) Frontend calls `/api/token` (no auth header) → receives a scoped, short-lived token.
-  3) Token is used on `/ws` (query param) and on uploads (Bearer) and is consumed on first use; old/reused tokens are rejected.
-- nginx:
-  - `/api/token` proxies internally with the injected Authorization header (no basic auth, no nginx CORS headers).
-  - `/ws` stays basic-auth-free for WebSocket upgrades (token-gated).
+## Changelog & Updates
 
+### 24 Dec 2025: Security & auth overhaul
+*Addressing the biggest security problem so far - the static frontend->backend bearer token.*
 
-## Backend refactor (Dec 2025)
+* **Per-Session Tokens:** Replaced single static API token with on-demand session tokens via `/api/token`.
+* **Scoped Access:** Tokens are signed with a backend key, scoped to WS/upload, and revoked after session end (recording stopped) /expiration (10 min currently, customizable in SMALLPIE_TOKEN_TTL_SECONDS).
+* **Flow:**
+    1.  Nginx proxies `/api/token` to backend (injecting `SMALLPIE_BOOTSTRAP_SECRET`).
+    2.  Frontend receives a short-lived token (no auth header needed).
+    3.  Token used for `/ws` (query param) and uploads (Bearer).
+* **Env Variables:**
+    * `SMALLPIE_SIGNING_KEY` (64-hex HMAC)
+    * `SMALLPIE_BOOTSTRAP_SECRET` (Shared secret, server-side only)
 
-`meeting_server.py` was split for readability and maintainability. Entry point remains `smallpie.backend.meeting_server:app`.
+#### Verification (Proof of Concept)
+```bash
+# 1. Generate a fresh scoped token
+# Replace {YOUR-SERVER-URL} with your actual domain
+TOKEN=$(curl -s -X POST https://{YOUR-SERVER-URL}/api/token -d scope=ws | jq -r .token)
 
-- `config.py` - env/config constants, paths, whisper settings, OpenAI client, SMTP flags.
-- `auth.py` - bearer and WS token checks.
-- `audio.py` - ffprobe/ffmpeg helpers and whisper.cpp transcription.
-- `analysis.py` - GPT analysis + trait updater.
-- `storage.py` - save transcripts/analysis to disk.
-- `emailer.py` - SMTP sender (HTML + text).
-- `pipeline.py` - batch upload pipeline, live orchestrator, thread helpers.
-- `api.py` - FastAPI app + routes wiring pipelines.
-- `meeting_server.py` - thin facade for uvicorn/CLI, preserving old usage.
+# 2. Use token for WebSocket Upgrade -> Success (101 Switching Protocols)
+curl -i -N \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  "https://{YOUR-SERVER-URL}/ws?token=${TOKEN}"
+# Output: HTTP/1.1 101 Switching Protocols ...
 
+# 3. Attempt to REUSE the same token -> Access Denied (Token consumed)
+curl -i -N \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  "https://{YOUR-SERVER-URL}/ws?token=${TOKEN}"
+# Output: HTTP/1.1 403 Forbidden ...
+```
 
-## Nov 16, 2025: v0.6.1 - Streaming Transcription Architecture
+### Nov 16, 2025: v0.6.1 - Streaming Transcription Architecture
+*Introduced near-real-time processing.*
 
-### Added
-- Introduced a new **live transcription orchestrator**, enabling
-  near-real-time processing of audio during the recording session.
-- Implemented **parallel chunk-based transcription**:
-  audio is segmented into fixed-duration slices (5s chinks from frontend, concatenated into 60s on backend) 
-  while streaming. Each slice is immediately handed off to whisper.cpp in a background thread for 
-  parallel processing while recording is still running on the frontend. 
-- Added a thread-safe transcript aggregator to merge partial transcriptions
-  into the final meeting transcript.
-- Integrated final-segment duration detection to prevent empty or corrupt
-  last-chunk artifacts (`ffprobe: duration 'N/A'` errors avoided).
+* **Live Orchestrator:** Audio is segmented into fixed-duration slices (5s chunks from frontend -> reconstructed to 60s on backend).
+* **Concurrent Pipeline:** Extraction and pre-processing happen in parallel threads.
+* **Serialized Inference:** Actual Whisper transcription is semaphore-locked (1 job at a time) to prevent CPU thrashing on my tiny Hetzner server. Deliberately parametrized
+in WHISPER_SEMAPHORE = threading.Semaphore(1) in config.py, change it as you will. 
+* **Improvements:**
+    * Thread-safe transcript aggregator.
+    * Final-segment duration detection (prevents `ffprobe: duration 'N/A'` errors).
+    * Safe flushing of raw audio before orchestrator finalization.
 
-### Improved
-- WebSocket recording endpoint now flushes raw audio safely before
-  signaling the orchestrator to finalize.
-- Enhanced error handling around ffmpeg/ffprobe to avoid transient corruption states.
-- Simplified STOP message detection and improved metadata parsing.
-- Basic auth restored for REST API endpoints while remaining disabled for `/ws`.
+---
 
-### Fixed
-- Eliminated race conditions when processing the last audio segment.
-- Prevented whisper.cpp from receiving zero-length WAV files.
-- Resolved issues where nginx basic auth could break WebSocket upgrade requests.
+## Limitations (v0.6)
 
-## WebSocket Access Token (superseded by per-session tokens)
+1.  **Near-real-time (Not true streaming):** Processing happens in fixed chunks (e.g., 60s), not token-level live streaming.
+2.  **CPU-bound:** All transcription is local via `whisper.cpp` (CPU only). Concurrency is limited by design to avoid stalling the audio capture.
+3.  **Chunk Boundaries:** Audio is split by duration. Chunks may cut mid-sentence - mitigated downstream during the semantic diarization phaze, but worth noting. 
+4.  **Diarization:** Tested with max 4 speakers, works equally well as it does with 2. Multi-speaker thresholds (5 and more) are experimental.
+5.  **No Retries:** If `whisper.cpp` fails, there is no fallback logic.
+6.  **Temporary Files:** Cleanup is limited; WAV files may persist if pipeline crashes.
+7.  **Frontend Feedback:** Minimal error reporting on the UI side.
+8.  **Monitoring:** No metrics for latency, queue backlog, or throughput yet.
 
-- `/ws` remains basic-auth-free for upgrades, but access is now gated by the per-session tokens issued via `/api/token` (see above).
-- No static token or `SMALLPIE_WS_TOKEN` is used anymore; tokens are one-shot, short-lived, and tied to a session.
+---
 
-------------------------------------------------------------
-## Limitations in v0.6
+## Install & Run (tested on Ubuntu 22+)
 
-### 1. Near-real-time transcription (not true streaming)
-The system processes audio in fixed-duration chunks (e.g., 60 seconds).  
-This enables incremental transcription but is not equivalent to continuous, token-level live streaming.
-
-### 2. CPU-bound whisper.cpp performance
-All transcription is performed locally via whisper.cpp on my tiny server's CPU.  
-There is no GPU acceleration, parallel model execution, or adaptive load balancing.
-
-### 3. Chunk boundary alignment is not guaranteed
-Audio segmentation occurs strictly by duration.  
-Chunks may start or end mid-sentence, which can reduce linguistic coherence in partial transcripts.
-
-### 4. Last-segment accuracy may vary
-While final-chunk duration handling has improved, abrupt WebSocket termination can still create
-edge cases where the ending segment is incomplete or requires special handling.
-
-### 5. Not tested multiple speakers diarization
-v0.6 assumes a multy-speaker transcription pipeline, but it has been tested with 4 speaker at maximum. 
-Multi-speaker diarization's thresholds are not yet fully known.
-
-### 6. No transcription retries or fallback logic
-If whisper.cpp fails, times out, or returns an error, the system does not currently retry or fall back to an alternative strategy.
-
-### 7. Trait generation remains append-only
-The traits file is append-only and does not validate the semantic correctness of entries produced by the LLM.
-
-### 8. WebSocket authentication is minimal
-The `/ws` endpoint uses a static internal token.  
-There is no JWT, key rotation, or per-session authorization mechanism.
-
-### 9. Temporary file cleanup is limited
-Temporary WAV files may persist if the pipeline terminates unexpectedly.  
-Automated cleanup is not yet implemented.
-
-### 10. No metrics or monitoring
-The system currently lacks instrumentation for:
-- whisper.cpp latency
-- queue backlog
-- transcription throughput
-- pipeline errors
-- WebSocket duration
-
-### 11. Frontend error reporting is minimal
-The frontend does not currently display detailed pipeline failures, partial-results status, or whisper health indicators.
-
-------------------------------------------------------------
-
-## Install & Run (Ubuntu 22+)
-
-Prereqs:
+### Prerequisites
+```bash
 sudo apt update && sudo apt install -y nodejs npm python3 python3-pip ffmpeg
+```
 
-------------------------------------------------------------
-
-Frontend:
-
+### 1. Frontend
+```bash
 cd smallpie/frontend
 npm install
 npm run dev -- --host 0.0.0.0
+# Open: http://YOUR_SERVER_IP:5173/
+```
 
-Open:
-http://YOUR_SERVER_IP:5173/
-
-------------------------------------------------------------
-
-## Python Pipeline (local mode)
-
-Dependencies:
+### 2. Python Pipeline (Local Mode)
+**Dependencies:**
+```bash
 pip install sounddevice soundfile openai ffmpeg-python
+```
+*Requires: whisper.cpp compiled (make), whisper-cli in PATH, ffmpeg, OpenAI API Key as an environemnt variable at the moment.*
 
-Run:
+**Run:**
+```bash
 python3 assistant-openai-whisper.py
+```
 
-Requires:
-- whisper.cpp compiled (make)
-- whisper-cli in PATH
-- ffmpeg installed
-- OpenAI API key
-
-------------------------------------------------------------
+---
 
 ## Roadmap
 
-v0.6
-- WebSocket ingestion design
-- Nginx reverse proxy skeleton
-- HTTPS certificate automation
-- First connection between frontend & backend
+* **v0.6 (Done):** WebSocket ingestion, Nginx proxy skeleton, Frontend <-> Backend connection, Gmail transcript sending.
+* **v0.7 (Next):** Real-time audio streaming, Parallel transcription queue, ICS file creation, Multi-user support.
+* **v0.8:** Real-time transcription & acoustic diarization.
 
-v0.7
-- Real-time audio streaming
-- Parallel transcription queue
-- ICS file creation
-- Gmail transcript sending
-- Multi-user support
+---
 
-------------------------------------------------------------
-
-## Vision
-
-smallpie aims to be:
-- Friendly  
-- Minimal  
-- Fast  
-- Useful  
-- Private  
-
-------------------------------------------------------------
-
-## Legal and Ethical Considerations
-
-smallpie processes sensitive meeting data, including voice recordings, transcripts, participant names, and meeting context. To ensure responsible use and compliance with applicable laws, 
-please review the following considerations carefully. 
+## Legal & Ethical Considerations
+*smallpie processes sensitive meeting data, including voice recordings, transcripts, participant names, and meeting context. To ensure responsible use and compliance with applicable laws, please review the following considerations carefully.*
 
 ### 1. User Responsibility for Consent
-Recording conversations is regulated differently around the world.  
-**You, the user, are solely responsible for informing all meeting participants** that the session will be recorded, transcribed, and analyzed.  
+Recording conversations is regulated differently around the world.
+**You, the user, are solely responsible for informing all meeting participants** that the session will be recorded, transcribed, and analyzed.
 smallpie provides recording and analysis tools but does not verify or enforce participant consent.
 
 ### 2. Handling of Personal Data
@@ -213,11 +154,11 @@ smallpie may process the following types of data:
 - Participant names and meeting metadata
 - AI-generated summaries and insights
 
-All data is processed **temporarily**.  
+All data is processed **temporarily**.
 smallpie does **not** store meeting data long-term, does **not** build user histories, and does **not** retain audio or transcripts after delivering results to the user.
 
 ### 3. Use of External AI Services
-Analyses are performed using external AI models (e.g., OpenAI).  
+Analyses are performed using external AI models (e.g., OpenAI).
 This means:
 - Transcripts and meeting metadata may be sent to an external provider.
 - External providers apply their own Terms of Service, privacy protections, retention policies, and limitations.
@@ -233,31 +174,29 @@ AI-generated content may and will include many inaccuracies. Some examples of su
 AI outputs should be treated as **assistive insights**, not authoritative truth.
 
 ### 5. Professional Profiles and Behavioral Insights
-If enabled, smallpie may generate communication-style or professional-development profiles for meeting participants. These profiles:
-- Are generated automatically by AI  
-- Are intended **solely for personal growth and meeting improvement**  
-- **Must not** be used in any way that resembles or could reasonably be interpreted as psychological evaluation, personality assessment, clinical judgment, HR analysis, employee monitoring, or any related practice  
-- Must not be used to support, justify, influence, or contribute to employment-related decisions - including, **but not limited to**, hiring, firing, promotion, demotion,
-  compensation, disciplinary measures, performance scoring, role assignment, or any other action that affects a person’s professional status, opportunities, or reputation  
+In the future, if explicitly enabled, smallpie may provide opportunity for generating communication-style or professional-development profiles for meeting participants. These profiles:
+- Would be generated automatically by AI
+- Would be intended **solely for personal growth and meeting improvement**
+- **Must not** be used in any way that resembles or could reasonably be interpreted as psychological evaluation, personality assessment, clinical judgment, HR analysis, employee monitoring, or any related practice
+- Must not be used to support, justify, influence, or contribute to employment-related decisions - including, **but not limited to**, hiring, firing, promotion, demotion, compensation, disciplinary measures, performance scoring, role assignment, or any other action that affects a person’s professional status, opportunities, or reputation
 
 These restrictions apply **regardless of context, intent, or interpretation**.
 
 ### 6. Security and Transmission
 Audio is processed locally on the user's device before transmission.
-Audio is processed locally on the smallpie's insfrastructure before transcription. 
-Textual data sent to external AI providers is transmitted over encrypted channels.  
-Users are solely responsible for ensuring that no confidential, sensitive, proprietary, or legally regulated information is shared or processed through smallpie. All use must comply with applicable laws, 
-regulations, contractual obligations, and ethical standards. 
+Audio is processed locally on the smallpie's insfrastructure before transcription.
+Textual data sent to external AI providers is transmitted over encrypted channels. Usage of smallpie data by said providers is governed by their own terms and conditions.  
+Users are solely responsible for ensuring that no confidential, sensitive, proprietary, or legally regulated information is shared or processed through smallpie. All use must comply with applicable laws, regulations, contractual obligations, and ethical standards.
 smallpie does not validate the nature of submitted content and assumes no liability for how users handle protected information.
 
 ### 7. Disclaimer
-smallpie is provided **“AS IS”**, without warranties of any kind.  
+smallpie is provided **“AS IS”**, without warranties of any kind.
 By using smallpie, you accept full responsibility for:
-- How you record, transmit, and process meeting data  
-- Ensuring full legal compliance in your jurisdiction  
-- Following both the **letter** and the **spirit** of all applicable laws, rules, regulations, contractual obligations, and ethical standards  
-- Avoiding the submission of confidential, sensitive, or regulated information  
-- Interpreting, validating, and acting on AI-generated results with the situationally appropriate judgment  
+- How you record, transmit, and process meeting data
+- Ensuring full legal compliance in your jurisdiction
+- Following both the **letter** and the **spirit** of all applicable laws, rules, regulations, contractual obligations, and ethical standards
+- Avoiding the submission of confidential, sensitive, or regulated information
+- Interpreting, validating, and acting on AI-generated results with the situationally appropriate judgment
 
-smallpie does not guarantee accuracy, completeness, legal validity, or suitability of any output.  
+smallpie does not guarantee accuracy, completeness, legal validity, or suitability of any output.
 All use is at the user’s own risk.
