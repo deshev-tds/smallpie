@@ -87,7 +87,7 @@ graph TD
     Queue -->|Read| Orchestrator
 
     Orchestrator -->|Write Parts| Disk
-    Orchestrator -->|Spawn (every 60s)| FFmpeg
+    Orchestrator -->|Spawn every 60s| FFmpeg
 
     Disk -->|Read Parts| FFmpeg
     FFmpeg -->|Extract Chunk| Disk
