@@ -1,0 +1,46 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a', 'primaryBorderColor': '#0f172a', 'primaryTextColor': '#0f172a', 'lineColor': '#0f172a', 'tertiaryColor': '#f8fafc', 'edgeLabelBackground':'#ffffff'}}}%%
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant FE as Frontend (browser)
+    participant API as FastAPI (/api, /ws)
+    participant TOK as Token svc
+    participant ORCH as Orchestrator (pipeline.py)
+    participant W as Chunk worker
+    participant GPT as OpenAI (analysis)
+    participant SMTP as SMTP (emailer.py)
+
+    U->>FE: Tap record + fill metadata
+    FE->>API: POST /api/token (scope=ws)
+    API->>TOK: issue_token(scope=ws)
+    TOK-->>API: token, session_id
+    API-->>FE: token
+
+    FE->>API: WSS /ws?token=...
+    API->>API: validate token
+    API-->>FE: 101 Switching Protocols
+    FE->>API: JSON metadata (name/topic/participants/email)
+    API->>ORCH: spawn orchestrator (queue + events)
+
+    loop Stream 5s blobs
+        FE->>API: binary audio blob
+        API->>ORCH: queue.put(blob)
+        ORCH->>ORCH: write part_N.webm
+    end
+
+    loop Every 60s chunk
+        ORCH->>W: spawn worker for chunk N
+        W->>W: concat parts -> wav chunk (ffmpeg)
+        W->>W: transcribe (whisper.cpp)
+        W-->>ORCH: transcript[N]
+    end
+
+    FE-->>API: STOP / {"type":"end"}
+    API->>ORCH: signal stop
+
+    ORCH->>W: final chunk worker
+    W-->>ORCH: transcript[N+1]
+    ORCH->>ORCH: join workers, merge transcript
+    ORCH->>GPT: send transcript for analysis
+    GPT-->>ORCH: analysis text
+    ORCH->>SMTP: send email (if configured)

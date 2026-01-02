@@ -1,0 +1,74 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a', 'primaryBorderColor': '#0f172a', 'primaryTextColor': '#0f172a', 'lineColor': '#0f172a', 'tertiaryColor': '#f8fafc', 'clusterBkg': '#f8fafc', 'edgeLabelBackground':'#ffffff'}}}%%
+flowchart LR
+    %% Grouping
+    subgraph Client["Frontend (browser)"]
+        User[(User)]
+        UI["UI + recorder"]
+        WS["WebSocket (live)"]
+        Upload["Upload (file)"]
+    end
+
+    subgraph Backend["FastAPI (api.py)"]
+        TokenSvc["Token service (tokens.py)"]
+        API["HTTP + WS endpoints"]
+    end
+
+    subgraph LivePath["Live orchestration (pipeline.py)"]
+        Queue["Audio queue"]
+        Parts["Part files (.webm)"]
+        Orchestrator["Orchestrator thread"]
+        Worker["Chunk workers"]
+        Whisper["whisper.cpp"]
+    end
+
+    subgraph UploadPath["Upload pipeline (pipeline.py)"]
+        Convert["ffmpeg convert → wav"]
+        Slice["slice to chunks"]
+        WhisperBatch["whisper.cpp"]
+    end
+
+    subgraph Storage["Local storage (config.py)"]
+        AudioDir["audio/"]
+        MeetingDir["meetings/ (transcript + analysis)"]
+    end
+
+    subgraph External["External services"]
+        GPT["OpenAI GPT (analysis.py)"]
+        SMTP["SMTP (emailer.py)"]
+        Inbox["User email inbox"]
+    end
+
+    %% Frontend auth + entrypoints
+    User --> UI
+    UI -->|request token (ws/upload)| TokenSvc
+    TokenSvc -->|token, session_id| UI
+
+    %% Live path
+    UI -->|live WS| API
+    API -->|enqueue blobs| Queue
+    Queue --> Orchestrator
+    Orchestrator -->|write parts| Parts
+    Orchestrator -->|spawn chunk workers| Worker
+    Parts --> Worker
+    Worker --> Whisper
+    Whisper --> Orchestrator
+    Orchestrator -->|transcript| MeetingDir
+    Orchestrator -->|analysis request| GPT
+    GPT -->|analysis| MeetingDir
+    MeetingDir --> SMTP
+    SMTP --> Inbox
+
+    %% Upload path
+    UI -->|upload file| API
+    API -->|save raw| AudioDir
+    API -->|start batch| Convert
+    AudioDir --> Convert
+    Convert --> Slice
+    Slice --> WhisperBatch
+    WhisperBatch --> MeetingDir
+
+    %% Styling
+    classDef live fill:#e0f2fe,stroke:#0284c7,stroke-width:1.2,color:#0f172a;
+    classDef upload fill:#fef9c3,stroke:#ca8a04,stroke-width:1.2,color:#0f172a;
+    class UI,WS,Queue,Parts,Orchestrator,Worker,Whisper,GPT,SMTP,MeetingDir live;
+    class Upload,AudioDir,Convert,Slice,WhisperBatch upload;
