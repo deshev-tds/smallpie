@@ -40,7 +40,7 @@ flowchart LR
 
     %% Frontend auth + entrypoints
     User --> UI
-    UI -->|request token (ws/upload)| TokenSvc
+    UI -->|token request| TokenSvc
     TokenSvc -->|token, session_id| UI
 
     %% Live path
