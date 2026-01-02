@@ -28,10 +28,10 @@ The system currently has two main components:
 ### System Workflows
 
 #### 1. High-Level Architecture
-[![System architecture & data flow](docs/diagrams/system-architecture.svg)](docs/diagrams/system-architecture.svg)
+[![System architecture & data flow](docs/diagrams/system-architecture.png)](docs/diagrams/system-architecture.png)
 
 #### 2. Live Recording Sequence
-[![Live recording sequence](docs/diagrams/live-sequence.svg)](docs/diagrams/live-sequence.svg)
+[![Live recording sequence](docs/diagrams/live-sequence.png)](docs/diagrams/live-sequence.png)
 
 ### Backend Structure (Refactored Dec 2025)
 The initial `meeting_server.py` monolith was split for readability. Entry point: `smallpie.backend.meeting_server:app`
