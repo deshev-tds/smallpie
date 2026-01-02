@@ -30,42 +30,42 @@ The system currently has two main components:
 #### 1. High-Level Architecture
 ```mermaid
 graph TD
-    subgraph Client [Client Side]
-        User((User))
-        Browser[Browser / Frontend]
-        Mic[Microphone]
-        Viz[Audio Visualizer]
-        WS_Client[WebSocket Client]
-        File_Input[File Input]
+    subgraph Client ["Client Side"]
+        User(("User"))
+        Browser["Browser / Frontend"]
+        Mic["Microphone"]
+        Viz["Audio Visualizer"]
+        WS_Client["WebSocket Client"]
+        File_Input["File Input"]
     end
 
-    subgraph Network [Network / Ingress]
-        Nginx[Nginx Reverse Proxy]
+    subgraph Network ["Network / Ingress"]
+        Nginx["Nginx Reverse Proxy"]
     end
 
-    subgraph Backend [Backend System]
-        API[FastAPI Server]
-        Auth[Token Issuer]
+    subgraph Backend ["Backend System"]
+        API["FastAPI Server"]
+        Auth["Token Issuer"]
 
-        subgraph Processing [Processing Core]
-            Orchestrator[Live Orchestrator Thread]
-            Batch[Batch Pipeline]
-            Queue[Audio Queue]
-            Store[Transcript Store]
+        subgraph Processing ["Processing Core"]
+            Orchestrator["Live Orchestrator Thread"]
+            Batch["Batch Pipeline"]
+            Queue["Audio Queue"]
+            Store["Transcript Store"]
         end
 
-        subgraph Workers [Worker Pool]
-            FFmpeg[FFmpeg Extraction]
-            Whisper[Whisper.cpp Transcription]
+        subgraph Workers ["Worker Pool"]
+            FFmpeg["FFmpeg Extraction"]
+            Whisper["Whisper.cpp Transcription"]
         end
 
-        Disk[(Temp File Storage)]
+        Disk[("Temp File Storage")]
     end
 
-    subgraph External [External Services]
-        OpenAI[OpenAI API (GPT Analysis)]
-        SMTP[SMTP Server (Email)]
-        UserEmail((User Inbox))
+    subgraph External ["External Services"]
+        OpenAI["OpenAI API (GPT Analysis)"]
+        SMTP["SMTP Server (Email)"]
+        UserEmail(("User Inbox"))
     end
 
     %% Flows
