@@ -1,11 +1,10 @@
 # smallpie
-**Meeting intelligence, but cute :3**
+
+Privacy-first meeting capture with local transcription, diarization cleanup, live notes, and email summaries.
 
 **Version:** 0.6.2 (Frontend + Local Python Pipeline)
 
-smallpie is a tiny, browser-based (explicitly mobile-friendly), tasty, portable prototype that turns meetings (ones that it can listen to from your phone, computer, raspberry, your grandma's laptop...) into structured transcripts, analysis, and actionable items sent to your email minutes after the meeting ends.
-
-It runs anywhere where a modern browser and a mic exist. To be tested on a fridge soon.
+smallpie is a mobile-friendly browser app and Python pipeline that turns meeting audio into structured transcripts, summaries, decisions, and action items. The current stack uses a Vite/Tailwind frontend, FastAPI/WebSocket ingestion, local whisper.cpp transcription, diarization cleanup, and email delivery.
 
 ---
 
@@ -63,23 +62,23 @@ The initial `meeting_server.py` monolith was split for readability. Entry point:
 
 #### Verification (Proof of Concept)
 ```bash
-# 1. Generate a fresh scoped token
+# 1. Generate a fresh scoped session credential
 # Replace {YOUR-SERVER-URL} with your actual domain
-TOKEN=$(curl -s -X POST https://{YOUR-SERVER-URL}/api/token -d scope=ws | jq -r .token)
+SESSION_CREDENTIAL=$(curl -s -X POST https://{YOUR-SERVER-URL}/api/token -d scope=ws | jq -r .token)
 
-# 2. Use token for WebSocket Upgrade -> Success (101 Switching Protocols)
+# 2. Use it for WebSocket Upgrade -> Success (101 Switching Protocols)
 curl -i -N \
   -H "Connection: Upgrade" \
   -H "Upgrade: websocket" \
-  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
-  "https://{YOUR-SERVER-URL}/ws?token=${TOKEN}"
+  -H "Sec-WebSocket-Key: <base64-websocket-key>" \
+  "https://{YOUR-SERVER-URL}/ws?token=${SESSION_CREDENTIAL}"
 # Output: HTTP/1.1 101 Switching Protocols ...
 
-# 3. Attempt to REUSE the same token -> Access Denied (Token consumed)
+# 3. Attempt to REUSE the same credential -> Access Denied
 curl -i -N \
   -H "Connection: Upgrade" \
   -H "Upgrade: websocket" \
-  "https://{YOUR-SERVER-URL}/ws?token=${TOKEN}"
+  "https://{YOUR-SERVER-URL}/ws?token=${SESSION_CREDENTIAL}"
 # Output: HTTP/1.1 403 Forbidden ...
 ```
 
@@ -208,3 +207,5 @@ By using smallpie, you accept full responsibility for:
 
 smallpie does not guarantee accuracy, completeness, legal validity, or suitability of any output.
 All use is at the user’s own risk.
+
+Maintained by [Damyan Deshev](https://github.com/damyan-deshev) - local-first software, deterministic data paths, meeting tooling, and practical product systems.
